@@ -95,13 +95,6 @@ stream {
                       .. [=[{*lua_cpath*};";
     lua_socket_log_errors off;
 
-    upstream gw_backend {
-        server 127.0.0.1:80;
-        balancer_by_lua_block {
-            gw.stream_balancer_phase()
-        }
-    }
-
     init_by_lua_block {
         require "resty.core"
         gw = require("gw")
@@ -124,11 +117,9 @@ stream {
         proxy_protocol on;
         {% end %}
 
-        preread_by_lua_block {
-            gw.stream_preread_phase()
+        content_by_lua_block {
+            gw.stream_content_phase()
         }
-
-        proxy_pass gw_backend;
 
         log_by_lua_block {
             gw.stream_log_phase()
