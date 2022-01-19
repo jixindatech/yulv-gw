@@ -27,7 +27,7 @@ end
 
 function _M.stream_content_phase()
     local ok, err = yulv.content_phase()
-    if not ok then
+    if err then
         ngx.log(ngx.ERR, "stream_preread_phase:" .. err)
     end
 end
