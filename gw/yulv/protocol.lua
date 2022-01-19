@@ -11,6 +11,7 @@ local concat = table.concat
 local error = error
 
 local bit = bit
+local tohex = bit.tohex
 local bor = bit.bor
 local lshift = bit.lshift
 local rshift = bit.rshift
@@ -57,7 +58,6 @@ if not ok then
     new_tab = function (narr, nrec) return {} end
 end
 
-
 local _M = {
 }
 
@@ -82,6 +82,19 @@ local function _dumphex(data)
     end
     return concat(bytes, " ")
 end
+
+
+-- mysql field value type converters
+local converters = new_tab(0, 9)
+for i = 0x01, 0x05 do
+    -- tiny, short, long, float, double
+    converters[i] = tonumber
+end
+converters[0x00] = tonumber  -- decimal
+-- converters[0x08] = tonumber  -- long long
+converters[0x09] = tonumber  -- int24
+converters[0x0d] = tonumber  -- year
+converters[0xf6] = tonumber  -- newdecimal
 
 
 local function _get_byte2(data, i)
@@ -130,11 +143,11 @@ local function _write_reqsock(sock, resp)
     local bytes, err
     bytes, err = sock:send(resp.header)
     if not bytes then
-        return nil, "socket send header failed"
+        return nil, "reqsock send header failed"
     end
     bytes, err = sock:send(resp.data)
     if not bytes then
-        return nil, "socket send data failed"
+        return nil, "reqsock send data failed"
     end
 
     return bytes, nil
@@ -145,11 +158,11 @@ local function _write_sqlsock(sock, resp)
     local bytes, err
     bytes, err = sock:send(resp.header)
     if not bytes then
-        return nil, "socket send header failed:" .. err
+        return nil, "sqlsock send header failed:" .. err
     end
     bytes, err = sock:send(resp.data)
     if not bytes then
-        return nil, "socket send data failed:" .. err
+        return nil, "sqlsock send data failed:" .. err
     end
 
     return bytes, nil
@@ -163,7 +176,7 @@ local function _recv_sql_packet(self)
 
     header, err = sock:receive(HEADER_LEN) -- packet header
     if not header then
-        return nil, nil, "failed to receive packet header: " .. err
+        return nil, nil, "failed to receive sql packet header: " .. err
     end
 
     --print("packet header: ", _dump(data))
@@ -257,7 +270,7 @@ local function _get_reqsock_data(self)
     local sock = self.reqsock
     local header, err = sock:receive(HEADER_LEN) -- packet header
     if not header then
-        return nil, "failed to receive packet header: " .. err
+        return nil, "failed to receive req packet header: " .. err
     end
     local len, pos = _get_byte3(header, 1)
     --print("packet length: ", len)
@@ -765,6 +778,53 @@ local function _recv_field_packet(self)
 end
 
 
+local function _parse_eof_packet(packet)
+    local pos = 2
+
+    local warning_count, pos = _get_byte2(packet, pos)
+    local status_flags = _get_byte2(packet, pos)
+
+    return warning_count, status_flags
+end
+
+
+local function _parse_row_data_packet(data, cols, compact)
+    local pos = 1
+    local ncols = #cols
+    local row
+    if compact then
+        row = new_tab(ncols, 0)
+    else
+        row = new_tab(0, ncols)
+    end
+    for i = 1, ncols do
+        local value
+        value, pos = _from_length_coded_str(data, pos)
+        local col = cols[i]
+        local typ = col.type
+        local name = col.name
+
+        --print("row field value: ", value, ", type: ", typ)
+
+        if value ~= null then
+            local conv = converters[typ]
+            if conv then
+                value = conv(value)
+            end
+        end
+
+        if compact then
+            row[i] = value
+
+        else
+            row[name] = value
+        end
+    end
+
+    return row
+end
+
+
 function _M.proxy_sql(self)
     while true
     do
@@ -878,6 +938,56 @@ function _M.proxy_sql(self)
         bytes, err = _write_reqsock(self.reqsock, resp)
         if err then
             return nil, err
+        end
+
+        local rows = new_tab(4, 0)
+        local i = 0
+        while true do
+            --print("reading a row")
+
+            resp, typ, err = _recv_sql_packet(self)
+            if not resp then
+                return nil, err
+            end
+
+            bytes, err = _write_reqsock(self.reqsock, resp)
+            if err then
+                return nil, err
+            end
+
+            if typ == RESP_EOF then
+                goto CONTINUE
+                --[[
+                local warning_count, status_flags = _parse_eof_packet(packet)
+
+                --print("status flags: ", status_flags)
+
+                if band(status_flags, SERVER_MORE_RESULTS_EXISTS) ~= 0 then
+                    return rows, "again"
+                end
+
+                break
+                ]]--
+            end
+
+            --[[
+            packet = resp.data
+            if typ == RESP_EOF then
+                local warning_count, status_flags = _parse_eof_packet(packet)
+
+                --print("status flags: ", status_flags)
+
+                if band(status_flags, SERVER_MORE_RESULTS_EXISTS) ~= 0 then
+                    return rows, "again"
+                end
+
+                break
+            end
+
+            local row = _parse_row_data_packet(packet, cols, nil)
+            i = i + 1
+            rows[i] = row
+            ]]--
         end
 
         ::CONTINUE::

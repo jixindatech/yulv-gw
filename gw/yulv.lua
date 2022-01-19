@@ -26,9 +26,6 @@ function _M.stream_init_worker()
 end
 
 function _M.content_phase()
-    ngx.log(ngx.ERR, "ip" .. ngx.var.remote_addr)
-    ngx.log(ngx.ERR, "port" .. ngx.var.remote_port)
-
     local key = ngx.var.remote_addr .. ":" ..ngx.var.remote_port
     connections[key] = true
 
