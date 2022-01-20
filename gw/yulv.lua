@@ -3,6 +3,7 @@ local tcp = ngx.socket.tcp
 
 local tab = require("gw.core.table")
 local protocol     = require("gw.yulv.protocol")
+local const        = require("gw.yulv.const")
 
 local ngx = ngx
 local str_byte  = string.byte
@@ -55,6 +56,8 @@ function _M.content_phase()
         if err then
             return nil, "get reqsock data failed:" .. err
         end
+
+        local reqtyp = sql:parse_req(resp)
 
         local bytes
         bytes, err = sql.write_sqlsock(sql.sqlsock, resp)
@@ -111,6 +114,9 @@ function _M.content_phase()
             ]]--
         end
 
+        if reqtyp == const.COM_QUERY then
+
+        end
         -- typ == RESP_DATA or RESP_AUTHMOREDATA(also mean RESP_DATA here)
 
         --print("read the result set header packet")
@@ -121,7 +127,7 @@ function _M.content_phase()
         end
 
         local field_count, extra = sql.parse_result_set_header_packet(packet)
-
+        ngx.log(ngx.ERR, 'filed count:'.. field_count)
         --print("field count: ", field_count)
 
         local cols = new_tab(field_count, 0)

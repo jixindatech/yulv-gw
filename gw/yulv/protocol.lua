@@ -17,6 +17,8 @@ local lshift = bit.lshift
 local rshift = bit.rshift
 local band = bit.band
 
+local const = require("gw.yulv.const")
+
 -- refer to https://dev.mysql.com/doc/internals/en/capability-flags.html#packet-Protocol::CapabilityFlags
 -- CLIENT_LONG_PASSWORD | CLIENT_FOUND_ROWS | CLIENT_LONG_FLAG
 -- | CLIENT_CONNECT_WITH_DB | CLIENT_ODBC | CLIENT_LOCAL_FILES
@@ -30,14 +32,6 @@ local CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA = 0x00200000
 local DEFAULT_AUTH_PLUGIN = "mysql_native_password"
 
 local SERVER_MORE_RESULTS_EXISTS = 8
-
-local RESP_OK = "OK"
-local RESP_AUTHMOREDATA = "AUTHMOREDATA"
-local RESP_LOCALINFILE = "LOCALINFILE"
-local RESP_EOF = "EOF"
-local RESP_ERR = "ERR"
-local RESP_DATA = "DATA"
-local OK = 0
 
 local MIN_PROTOCOL_VER = 10
 
@@ -61,6 +55,12 @@ end
 local _M = {
 }
 
+_M.RESP_OK = "OK"
+_M.RESP_AUTHMOREDATA = "AUTHMOREDATA"
+_M.RESP_LOCALINFILE = "LOCALINFILE"
+_M.RESP_EOF = "EOF"
+_M.RESP_ERR = "ERR"
+_M.RESP_DATA = "DATA"
 
 local mt = { __index = _M }
 
@@ -209,22 +209,23 @@ function _M.recv_sql_packet(self)
 
     --print("packet content: ", _dump(data))
     --print("packet content (ascii): ", data)
+    --ngx.log(ngx.ERR, "packet content: ", _dump(data))
 
     local field_count = strbyte(data, 1)
 
     local typ
     if field_count == 0x00 then
-        typ = RESP_OK
+        typ = _M.RESP_OK
     elseif field_count == 0x01 then
-        typ = RESP_AUTHMOREDATA
+        typ = _M.RESP_AUTHMOREDATA
     elseif field_count == 0xfb then
-        typ = RESP_LOCALINFILE
+        typ = _M.RESP_LOCALINFILE
     elseif field_count == 0xfe then
-        typ = RESP_EOF
+        typ = _M.RESP_EOF
     elseif field_count == 0xff then
-        typ = RESP_ERR
+        typ = _M.RESP_ERR
     else
-        typ = RESP_DATA
+        typ = _M.RESP_DATA
     end
 
     return { header = header, data = data }, typ
@@ -255,12 +256,12 @@ local function _read_ok_result(self)
 
     self.sqldata = resp
     local packet = resp.data
-    if typ == RESP_ERR then
+    if typ == _M.RESP_ERR then
         local errno, msg, sqlstate = _parse_err_packet(packet)
         return msg, errno, sqlstate
     end
 
-    if typ ~= RESP_OK then
+    if typ ~= _M.RESP_OK then
         return "bad packet type: " .. typ
     end
 end
@@ -302,7 +303,7 @@ local function _read_hand_shake_packet(self)
     end
 
     local packet = resp.data
-    if typ == RESP_ERR then
+    if typ == _M.RESP_ERR then
         local errno, msg, sqlstate = _parse_err_packet(packet)
         return nil, nil, msg, errno, sqlstate
     end
@@ -390,15 +391,15 @@ local function _read_auth_result(self, old_auth_data, plugin)
     self.sqldata = resp
 
     local packet = resp.data
-    if typ == RESP_OK then
-        return RESP_OK, ""
+    if typ == _M.RESP_OK then
+        return _M.RESP_OK, ""
     end
 
-    if typ == RESP_AUTHMOREDATA then
+    if typ == _M.RESP_AUTHMOREDATA then
         return sub(packet, 2), ""
     end
 
-    if typ == RESP_EOF then
+    if typ == _M.RESP_EOF then
         if #packet == 1 then -- old pre-4.1 authentication protocol
             return nil, "mysql_old_password"
         end
@@ -413,7 +414,7 @@ local function _read_auth_result(self, old_auth_data, plugin)
         return sub(packet, pos), plugin
     end
 
-    if typ == RESP_ERR then
+    if typ == _M.RESP_ERR then
         local errno, msg, sqlstate = _parse_err_packet(packet)
         return errno, sqlstate, msg
     end
@@ -430,7 +431,7 @@ local function _handle_auth_result(self, old_auth_data, plugin)
 
     _M.write_reqsock(self.reqsock, self.sqldata)
 
-    if auth_data == RESP_OK then
+    if auth_data == _M.RESP_OK then
         return
     end
 
@@ -473,7 +474,7 @@ local function _handle_auth_result(self, old_auth_data, plugin)
 
         _M.write_reqsock(self.reqsock, self.sqldata)
 
-        if auth_data == RESP_OK then
+        if auth_data == _M.RESP_OK then
             return
         end
 
@@ -761,16 +762,16 @@ function _M.recv_field_packet(self)
     end
 
     local packet = resp.data
-    if typ == RESP_ERR then
+    if typ == _M.RESP_ERR then
         local errno, msg, sqlstate = _parse_err_packet(packet)
         return nil, msg, errno, sqlstate
     end
 
-    if typ ~= RESP_DATA then
+    if typ ~= _M.RESP_DATA then
         return nil, "bad field packet type: " .. typ
     end
 
-    -- typ == RESP_DATA
+    -- typ == _M.RESP_DATA
     self.sqldata = resp
     return
 
@@ -825,6 +826,24 @@ local function _parse_row_data_packet(data, cols, compact)
 end
 
 
+function _M.filed_list(self)
+
+end
+
+
+function _M.parse_req(self, resp)
+    local data = resp.data
+    local cmd = strbyte(data, 1)
+    if cmd == const.COM_QUERY then
+        ngx.log(ngx.ERR, "query:" .. sub(data, 1, #data))
+    elseif cmd == const.COM_FIELD_LIST then
+        ngx.log(ngx.ERR, 'filed list')
+    end
+
+    return cmd
+end
+
+
 function _M.new(self, opts)
     if opts == nil or opts.reqsock == nil or opts.sqlsock == nil then
         return nil, "invalid options"
@@ -836,7 +855,7 @@ function _M.new(self, opts)
     end
     self._max_packet_size = max_packet_size
 
-    return setmetatable({ reqsock = opts.reqsock, sqlsock = opts.sqlsock }, mt), nil
+    return setmetatable({ reqsock = opts.reqsock, sqlsock = opts.sqlsock, reqtyp = nil }, mt), nil
 end
 
 return _M
