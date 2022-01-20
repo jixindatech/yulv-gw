@@ -139,7 +139,7 @@ local function _from_cstring(data, i)
 end
 
 
-local function _write_reqsock(sock, resp)
+function _M.write_reqsock(sock, resp)
     local bytes, err
     bytes, err = sock:send(resp.header)
     if not bytes then
@@ -154,7 +154,7 @@ local function _write_reqsock(sock, resp)
 end
 
 
-local function _write_sqlsock(sock, resp)
+function _M.write_sqlsock(sock, resp)
     local bytes, err
     bytes, err = sock:send(resp.header)
     if not bytes then
@@ -169,7 +169,7 @@ local function _write_sqlsock(sock, resp)
 end
 
 
-local function _recv_sql_packet(self)
+function _M.recv_sql_packet(self)
     local sock = self.sqlsock
     local header, data
     local err
@@ -248,7 +248,7 @@ end
 
 
 local function _read_ok_result(self)
-    local resp, typ, err = _recv_sql_packet(self)
+    local resp, typ, err = _M.recv_sql_packet(self)
     if err then
         return "failed to receive the result packet: " .. err
     end
@@ -266,7 +266,7 @@ local function _read_ok_result(self)
 end
 
 
-local function _get_reqsock_data(self)
+function _M.get_reqsock_data(self)
     local sock = self.reqsock
     local header, err = sock:receive(HEADER_LEN) -- packet header
     if not header then
@@ -296,7 +296,7 @@ end
 
 -- refer to https://dev.mysql.com/doc/internals/en/connection-phase-packets.html
 local function _read_hand_shake_packet(self)
-    local resp, typ, err = _recv_sql_packet(self)
+    local resp, typ, err = _M.recv_sql_packet(self)
     if err then
         return nil, nil, err
     end
@@ -383,7 +383,7 @@ local function _read_hand_shake_packet(self)
 end
 
 local function _read_auth_result(self, old_auth_data, plugin)
-    local resp, typ, err = _recv_sql_packet(self)
+    local resp, typ, err = _M.recv_sql_packet(self)
     if err then
         return nil, nil, "failed to receive the result packet: " .. err
     end
@@ -428,7 +428,7 @@ local function _handle_auth_result(self, old_auth_data, plugin)
         return err, errno, sqlstate
     end
 
-    _write_reqsock(self.reqsock, self.sqldata)
+    _M.write_reqsock(self.reqsock, self.sqldata)
 
     if auth_data == RESP_OK then
         return
@@ -454,12 +454,12 @@ local function _handle_auth_result(self, old_auth_data, plugin)
         end
         ]]--
         local resp
-        resp, err = _get_reqsock_data(self)
+        resp, err = _M.get_reqsock_data(self)
         if err ~= nil then
             return err
         end
         local bytes
-        bytes, err = _write_sqlsock(self.sqlsock, resp)
+        bytes, err = _M.write_sqlsock(self.sqlsock, resp)
         if err ~= nil then
             return err
         end
@@ -471,7 +471,7 @@ local function _handle_auth_result(self, old_auth_data, plugin)
             return err, errno, sqlstate
         end
 
-        _write_reqsock(self.reqsock, self.sqldata)
+        _M.write_reqsock(self.reqsock, self.sqldata)
 
         if auth_data == RESP_OK then
             return
@@ -495,7 +495,7 @@ local function _handle_auth_result(self, old_auth_data, plugin)
                 local errno, sqlstate
                 err, errno, sqlstate = _read_ok_result(self)
 
-                _write_reqsock(self.reqsock, self.resp)
+                _M.write_reqsock(self.reqsock, self.resp)
                 if err ~= nil  then
                     return err, errno, sqlstate
                 end
@@ -505,12 +505,12 @@ local function _handle_auth_result(self, old_auth_data, plugin)
             if status == 4 then
                 if self.is_unix or self.use_ssl then
                     local resp
-                    resp, err = _get_reqsock_data(self)
+                    resp, err = _M.get_reqsock_data(self)
                     if err ~= nil then
                         return err
                     end
                     local bytes
-                    bytes, err = _write_sqlsock(self.sqlsock, resp)
+                    bytes, err = _M.write_sqlsock(self.sqlsock, resp)
                     if err ~= nil then
                         return err
                     end
@@ -527,23 +527,23 @@ local function _handle_auth_result(self, old_auth_data, plugin)
                 ]]--
                 else
                     local resp
-                    resp, err = _get_reqsock_data(self)
+                    resp, err = _M.get_reqsock_data(self)
                     if err ~= nil then
                         return err
                     end
                     local bytes
-                    bytes, err = _write_sqlsock(self.sqlsock, resp)
+                    bytes, err = _M.write_sqlsock(self.sqlsock, resp)
                     if err ~= nil then
                         return err
                     end
 
                     local typ
-                    resp, typ, err = _recv_sql_packet(self)
+                    resp, typ, err = _M.recv_sql_packet(self)
                     if err then
                         return err
                     end
 
-                    bytes, err = _write_reqsock(self.reqsock, resp)
+                    bytes, err = _M.write_reqsock(self.reqsock, resp)
                     if err ~= nil then
                         return err
                     end
@@ -580,7 +580,7 @@ local function _handle_auth_result(self, old_auth_data, plugin)
 
                 local errno, sqlstate
                 err, errno, sqlstate = _read_ok_result(self)
-                _write_reqsock(self.reqsock, self.resp)
+                _M.write_reqsock(self.reqsock, self.resp)
                 if err ~= nil  then
                     return err, errno, sqlstate
                 end
@@ -593,12 +593,12 @@ local function _handle_auth_result(self, old_auth_data, plugin)
     if plugin == "sha256_password" then
         if #auth_data ~= 0 then
             local resp
-            resp, err = _get_reqsock_data(self)
+            resp, err = _M.get_reqsock_data(self)
             if err ~= nil then
                 return err
             end
             local bytes
-            bytes, err = _write_sqlsock(self.sqlsock, resp)
+            bytes, err = _M.write_sqlsock(self.sqlsock, resp)
             if err ~= nil then
                 return err
             end
@@ -614,7 +614,7 @@ local function _handle_auth_result(self, old_auth_data, plugin)
             --]]
             local errno, sqlstate
             err, errno, sqlstate = _read_ok_result(self)
-            _write_reqsock(self.reqsock, self.resp)
+            _M.write_reqsock(self.reqsock, self.resp)
             if err ~= nil  then
                 return err, errno, sqlstate
             end
@@ -631,18 +631,18 @@ function _M.do_handshake(self)
     end
 
     local bytes
-    bytes, err = _write_reqsock(self.reqsock, self.sqldata)
+    bytes, err = _M.write_reqsock(self.reqsock, self.sqldata)
     if err then
         return nil, err
     end
 
     local resp
-    resp, err = _get_reqsock_data(self)
+    resp, err = _M.get_reqsock_data(self)
     if err then
         return nil, "socket get req data failed:" .. err
     end
 
-    bytes, err = _write_sqlsock(self.sqlsock, resp)
+    bytes, err = _M.write_sqlsock(self.sqlsock, resp)
     if err then
         return nil, "socket send data failed:" .. err
     end
@@ -692,7 +692,7 @@ local function _from_length_coded_bin(data, pos)
 end
 
 
-local function _parse_result_set_header_packet(packet)
+function _M.parse_result_set_header_packet(packet)
     local field_count, pos = _from_length_coded_bin(packet, 1)
 
     local extra
@@ -754,8 +754,8 @@ local function _parse_field_packet(data)
 end
 
 
-local function _recv_field_packet(self)
-    local resp, typ, err = _recv_sql_packet(self)
+function _M.recv_field_packet(self)
+    local resp, typ, err = _M.recv_sql_packet(self)
     if not resp then
         return nil, err
     end
@@ -822,176 +822,6 @@ local function _parse_row_data_packet(data, cols, compact)
     end
 
     return row
-end
-
-
-function _M.proxy_sql(self)
-    while true
-    do
-        local resp, err = _get_reqsock_data(self)
-        if err then
-            return nil, "get reqsock data failed:" .. err
-        end
-
-        local bytes
-        bytes, err = _write_sqlsock(self.sqlsock, resp)
-        if err then
-            return nil, "socket send data failed:" .. err
-        end
-
-        local typ
-        resp, typ, err = _recv_sql_packet(self)
-        if err then
-            return nil, "recv sql packet failed:" .. err
-        end
-
-        local packet = resp.data
-        if typ == RESP_ERR then
-            bytes, err = _write_reqsock(self.reqsock, resp)
-            if err then
-                return nil, "write reqsock failed:" .. err
-            end
-
-            goto CONTINUE
-            --local errno, msg, sqlstate = _parse_err_packet(packet)
-            --return nil, msg, errno, sqlstate
-        end
-
-        if typ == RESP_OK then
-            bytes, err = _write_reqsock(self.reqsock, resp)
-            if err then
-                return nil, "write reqsock failed:" .. err
-            end
-
-            goto CONTINUE
-            --[[
-            local res = _parse_ok_packet(packet)
-            if res and band(res.server_status, SERVER_MORE_RESULTS_EXISTS) ~= 0 then
-                return res, "again"
-            end
-            self.state = STATE_CONNECTED
-            return res
-            ]]--
-        end
-
-        if typ == RESP_LOCALINFILE then
-            bytes, err = _write_reqsock(self.reqsock, resp)
-            if err then
-                return nil, err
-            end
-
-            goto CONTINUE
-            --[[
-            self.state = STATE_CONNECTED
-
-            return nil, "packet type " .. typ .. " not supported"
-            ]]--
-        end
-
-        -- typ == RESP_DATA or RESP_AUTHMOREDATA(also mean RESP_DATA here)
-
-        --print("read the result set header packet")
-
-        bytes, err = _write_reqsock(self.reqsock, resp)
-        if err then
-            return nil, err
-        end
-
-        local field_count, extra = _parse_result_set_header_packet(packet)
-
-        --print("field count: ", field_count)
-
-        local cols = new_tab(field_count, 0)
-        for i = 1, field_count do
-            self.sqldata = nil
-            local col, errno, sqlstate
-            col, err, errno, sqlstate = _recv_field_packet(self)
-            if self.sqldata == nil then
-                return nil, err
-            end
-
-            resp = self.sqldata
-            bytes, err = _write_reqsock(self.reqsock, resp)
-            if err then
-                return nil, err
-            end
-
-            --[[
-            if not col then
-                return nil, err, errno, sqlstate
-            end
-
-            cols[i] = col
-            ]]--
-        end
-
-        resp, typ, err = _recv_sql_packet(self)
-        if err then
-            return nil, err
-        end
-
-        if typ ~= RESP_EOF then
-            return nil, "unexpected packet type " .. typ .. " while eof packet is "
-                    .. "expected"
-        end
-
-        bytes, err = _write_reqsock(self.reqsock, resp)
-        if err then
-            return nil, err
-        end
-
-        local rows = new_tab(4, 0)
-        local i = 0
-        while true do
-            --print("reading a row")
-
-            resp, typ, err = _recv_sql_packet(self)
-            if not resp then
-                return nil, err
-            end
-
-            bytes, err = _write_reqsock(self.reqsock, resp)
-            if err then
-                return nil, err
-            end
-
-            if typ == RESP_EOF then
-                goto CONTINUE
-                --[[
-                local warning_count, status_flags = _parse_eof_packet(packet)
-
-                --print("status flags: ", status_flags)
-
-                if band(status_flags, SERVER_MORE_RESULTS_EXISTS) ~= 0 then
-                    return rows, "again"
-                end
-
-                break
-                ]]--
-            end
-
-            --[[
-            packet = resp.data
-            if typ == RESP_EOF then
-                local warning_count, status_flags = _parse_eof_packet(packet)
-
-                --print("status flags: ", status_flags)
-
-                if band(status_flags, SERVER_MORE_RESULTS_EXISTS) ~= 0 then
-                    return rows, "again"
-                end
-
-                break
-            end
-
-            local row = _parse_row_data_packet(packet, cols, nil)
-            i = i + 1
-            rows[i] = row
-            ]]--
-        end
-
-        ::CONTINUE::
-    end
 end
 
 
