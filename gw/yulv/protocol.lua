@@ -17,7 +17,14 @@ local lshift = bit.lshift
 local rshift = bit.rshift
 local band = bit.band
 
+local null = ngx.null
+
+local tab_concat = table.concat
+
 local const = require("gw.yulv.const")
+local sqlerrno = require("gw.yulv.errno")
+local sqlerrmsg = require("gw.yulv.errmsg")
+local sqlerrstate = require("gw.yulv.errstate")
 
 -- refer to https://dev.mysql.com/doc/internals/en/capability-flags.html#packet-Protocol::CapabilityFlags
 -- CLIENT_LONG_PASSWORD | CLIENT_FOUND_ROWS | CLIENT_LONG_FLAG
@@ -129,6 +136,26 @@ local function _get_byte8(data, i)
 end
 
 
+local function _set_byte2(n)
+    return strchar(band(n, 0xff), band(rshift(n, 8), 0xff))
+end
+
+
+local function _set_byte3(n)
+    return strchar(band(n, 0xff),
+            band(rshift(n, 8), 0xff),
+            band(rshift(n, 16), 0xff))
+end
+
+
+local function _set_byte4(n)
+    return strchar(band(n, 0xff),
+            band(rshift(n, 8), 0xff),
+            band(rshift(n, 16), 0xff),
+            band(rshift(n, 24), 0xff))
+end
+
+
 local function _from_cstring(data, i)
     local last = strfind(data, "\0", i, true)
     if not last then
@@ -140,14 +167,9 @@ end
 
 
 function _M.write_reqsock(sock, resp)
-    local bytes, err
-    bytes, err = sock:send(resp.header)
-    if not bytes then
-        return nil, "reqsock send header failed"
-    end
-    bytes, err = sock:send(resp.data)
-    if not bytes then
-        return nil, "reqsock send data failed"
+    local bytes, err = sock:send(tab_concat(resp))
+    if err then
+        return nil, err
     end
 
     return bytes, nil
@@ -155,17 +177,31 @@ end
 
 
 function _M.write_sqlsock(sock, resp)
-    local bytes, err
-    bytes, err = sock:send(resp.header)
-    if not bytes then
-        return nil, "sqlsock send header failed:" .. err
-    end
-    bytes, err = sock:send(resp.data)
-    if not bytes then
-        return nil, "sqlsock send data failed:" .. err
+    local bytes, err = sock:send(tab_concat(resp))
+    if err then
+        return nil, err
     end
 
     return bytes, nil
+end
+
+
+function _M.get_error_packet(self, err)
+    local errno = sqlerrno[err]
+    if errno == nil then
+        errno = sqlerrno.ER_UNKNOWN_ERROR
+    end
+
+    local packet = _set_byte2(errno)
+    if self._capabilities and const.capabilities.CLIENT_PROTOCOL_41 then
+        if sqlerrstate[err] ~= nil then
+            packet = packet .. "#" .. sqlerrstate[err]
+        else
+            packet = packet .. "#" .. sqlerrstate[sqlerrstate.DEFAULT_MYSQL_STATE]
+        end
+    end
+
+    return  packet .. sqlerrmsg[errno]
 end
 
 
@@ -176,39 +212,27 @@ function _M.recv_sql_packet(self)
 
     header, err = sock:receive(HEADER_LEN) -- packet header
     if not header then
-        return nil, nil, "failed to receive sql packet header: " .. err
+        return nil, nil, err
     end
-
-    --print("packet header: ", _dump(data))
 
     local len, pos = _get_byte3(header, 1)
 
-    --print("packet length: ", len)
-
     if len == 0 then
-        return nil, nil, "empty packet"
+        return nil, nil, sqlerrno.ER_MALFORMED_PACKET
     end
 
     if len > self._max_packet_size then
-        return nil, nil, "packet size too big: " .. len
+        return nil, nil, sqlerrno.ER_NET_PACKET_TOO_LARGE
     end
 
     local num = strbyte(header, pos)
-
-    --print("recv packet: packet no: ", num)
-
-    self.packet_no = num
+    self._packet_no = num
 
     data, err = sock:receive(len)
-
-    --print("receive returned")
-
     if not data then
-        return nil, nil, "failed to read packet content: " .. err
+        return nil, nil, err
     end
 
-    --print("packet content: ", _dump(data))
-    --print("packet content (ascii): ", data)
     --ngx.log(ngx.ERR, "packet content: ", _dump(data))
 
     local field_count = strbyte(data, 1)
@@ -228,7 +252,7 @@ function _M.recv_sql_packet(self)
         typ = _M.RESP_DATA
     end
 
-    return { header = header, data = data }, typ
+    return { header , data  }, typ
 end
 
 
@@ -251,18 +275,18 @@ end
 local function _read_ok_result(self)
     local resp, typ, err = _M.recv_sql_packet(self)
     if err then
-        return "failed to receive the result packet: " .. err
+        return err
     end
 
-    self.sqldata = resp
-    local packet = resp.data
+    self._sqldata = resp
+    local packet = resp[2]
     if typ == _M.RESP_ERR then
         local errno, msg, sqlstate = _parse_err_packet(packet)
         return msg, errno, sqlstate
     end
 
     if typ ~= _M.RESP_OK then
-        return "bad packet type: " .. typ
+        return "invalid type"
     end
 end
 
@@ -270,29 +294,27 @@ end
 function _M.get_reqsock_data(self)
     local sock = self.reqsock
     local header, err = sock:receive(HEADER_LEN) -- packet header
-    if not header then
-        return nil, "failed to receive req packet header: " .. err
+    if err then
+        return nil, err
     end
     local len, pos = _get_byte3(header, 1)
-    --print("packet length: ", len)
 
     if len == 0 then
         return nil, "empty packet"
     end
 
     local num = strbyte(header, pos)
-    --print("recv packet: packet no: ", num)
 
     local packet_no = num
-    self.packet_no = num
+    self._packet_no = num
 
     local data
     data, err = sock:receive(len)
-    if not data then
-        return nil, "failed to read packet content: " .. err
+    if err then
+        return nil,  err
     end
 
-    return { header = header, data = data }, nil
+    return { header , data  }, nil
 end
 
 -- refer to https://dev.mysql.com/doc/internals/en/connection-phase-packets.html
@@ -302,7 +324,7 @@ local function _read_hand_shake_packet(self)
         return nil, nil, err
     end
 
-    local packet = resp.data
+    local packet = resp[2]
     if typ == _M.RESP_ERR then
         local errno, msg, sqlstate = _parse_err_packet(packet)
         return nil, nil, msg, errno, sqlstate
@@ -320,7 +342,7 @@ local function _read_hand_shake_packet(self)
                 .. " or higher is required"
     end
 
-    self.protocol_ver = protocol_ver
+    self._protocol_ver = protocol_ver
 
     local server_ver, pos = _from_cstring(packet, 2)
     if not server_ver then
@@ -352,7 +374,7 @@ local function _read_hand_shake_packet(self)
     local more_capabilities
     more_capabilities, pos = _get_byte2(packet, pos)
 
-    self.capabilities = bor(capabilities, lshift(more_capabilities, 16))
+    self._capabilities = bor(capabilities, lshift(more_capabilities, 16))
 
     pos = pos + 11 -- skip length of auth-plugin-data(1) and reserved(10)
 
@@ -366,7 +388,7 @@ local function _read_hand_shake_packet(self)
     pos = pos + 13
 
     local plugin, _
-    if band(self.capabilities, CLIENT_PLUGIN_AUTH) > 0 then
+    if band(self._capabilities, CLIENT_PLUGIN_AUTH) > 0 then
         plugin, _ = _from_cstring(packet, pos)
         if not plugin then
             -- EOF if version (>= 5.5.7 and < 5.5.10) or (>= 5.6.0 and < 5.6.2)
@@ -378,19 +400,18 @@ local function _read_hand_shake_packet(self)
         plugin = DEFAULT_AUTH_PLUGIN
     end
 
-    self.sqldata = resp
-    return scramble .. scramble_part2, plugin
+    return resp, plugin
 
 end
 
-local function _read_auth_result(self, old_auth_data, plugin)
+local function _read_auth_result(self, plugin)
     local resp, typ, err = _M.recv_sql_packet(self)
     if err then
-        return nil, nil, "failed to receive the result packet: " .. err
+        return nil, nil, err
     end
-    self.sqldata = resp
+    self._sqldata = resp
 
-    local packet = resp.data
+    local packet = resp[2]
     if typ == _M.RESP_OK then
         return _M.RESP_OK, ""
     end
@@ -422,14 +443,15 @@ local function _read_auth_result(self, old_auth_data, plugin)
     return nil, nil, "bad packet type: " .. typ
 end
 
-local function _handle_auth_result(self, old_auth_data, plugin)
-    local auth_data, new_plugin, err = _read_auth_result(self, old_auth_data, plugin)
+local function _handle_auth_result(self, old_auth_data,  plugin)
+    local auth_data, new_plugin, err = _read_auth_result(self, plugin)
     if err ~= nil then
         local errno, sqlstate = auth_data, new_plugin
         return err, errno, sqlstate
     end
 
-    _M.write_reqsock(self.reqsock, self.sqldata)
+    _M.write_reqsock(self.reqsock, self._sqldata)
+    self._sqldata = nil
 
     if auth_data == _M.RESP_OK then
         return
@@ -443,17 +465,7 @@ local function _handle_auth_result(self, old_auth_data, plugin)
         end
 
         plugin = new_plugin
-        --[[
-        local auth_resp, err = _auth(self, auth_data, plugin)
-        if not auth_resp then
-            return err
-        end
 
-        local bytes, err = _send_packet(self, auth_resp, #auth_resp)
-        if not bytes then
-            return "failed to send client authentication packet: " .. err
-        end
-        ]]--
         local resp
         resp, err = _M.get_reqsock_data(self)
         if err ~= nil then
@@ -465,14 +477,14 @@ local function _handle_auth_result(self, old_auth_data, plugin)
             return err
         end
 
-        auth_data, new_plugin, err = _read_auth_result(self, old_auth_data,
-                plugin)
+        auth_data, new_plugin, err = _read_auth_result(self, plugin)
         if err ~= nil then
             local errno, sqlstate = auth_data, new_plugin
             return err, errno, sqlstate
         end
 
-        _M.write_reqsock(self.reqsock, self.sqldata)
+        _M.write_reqsock(self.reqsock, self._sqldata)
+        self._sqldata = nil
 
         if auth_data == _M.RESP_OK then
             return
@@ -495,11 +507,12 @@ local function _handle_auth_result(self, old_auth_data, plugin)
             if status == 3 then
                 local errno, sqlstate
                 err, errno, sqlstate = _read_ok_result(self)
-
-                _M.write_reqsock(self.reqsock, self.resp)
                 if err ~= nil  then
                     return err, errno, sqlstate
                 end
+
+                _M.write_reqsock(self.reqsock, self._sqldata)
+                self._sqldata = nil
             end
 
             -- caching_sha2_password perform full authentication
@@ -581,10 +594,12 @@ local function _handle_auth_result(self, old_auth_data, plugin)
 
                 local errno, sqlstate
                 err, errno, sqlstate = _read_ok_result(self)
-                _M.write_reqsock(self.reqsock, self.resp)
                 if err ~= nil  then
                     return err, errno, sqlstate
                 end
+
+                _M.write_reqsock(self.reqsock, self._sqldata)
+                self._sqldata = nil
             end
         end
 
@@ -615,29 +630,31 @@ local function _handle_auth_result(self, old_auth_data, plugin)
             --]]
             local errno, sqlstate
             err, errno, sqlstate = _read_ok_result(self)
-            _M.write_reqsock(self.reqsock, self.resp)
             if err ~= nil  then
                 return err, errno, sqlstate
             end
+
+            _M.write_reqsock(self.reqsock, self._sqldata)
+            self._sqldata = nil
         end
     end
 end
 
-
+-- https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::Handshake
 function _M.do_handshake(self)
     --get greeting data from sql server
-    local auth_data, plugin, err, errno, sqlstate = _read_hand_shake_packet(self)
+    local resp, plugin, err = _read_hand_shake_packet(self)
     if err ~= nil then
         return nil, err
     end
 
     local bytes
-    bytes, err = _M.write_reqsock(self.reqsock, self.sqldata)
+    bytes, err = _M.write_reqsock(self.reqsock, resp)
     if err then
         return nil, err
     end
 
-    local resp
+    --[[ client hello ]]--
     resp, err = _M.get_reqsock_data(self)
     if err then
         return nil, "socket get req data failed:" .. err
@@ -648,12 +665,42 @@ function _M.do_handshake(self)
         return nil, "socket send data failed:" .. err
     end
 
-    err, errno, sqlstate = _handle_auth_result(self, auth_data, plugin)
+    local typ
+    resp, typ, err = _M.recv_sql_packet(self)
     if err then
-        return nil, "failed to receive the result packet: " .. err
+        return nil, err
     end
 
-    self.status = STATUS_OK
+    if typ == _M.RESP_OK then
+        return _M.write_reqsock(self.reqsock, resp)
+    end
+
+    --[[ auth switch TODO: auth more data]]--
+    if typ == _M.RESP_EOF then
+        bytes, err = _M.write_reqsock(self.reqsock, resp)
+        if err ~= nil then
+            return nil, err
+        end
+        resp, err = _M.get_reqsock_data(self)
+        if err then
+            return nil, err
+        end
+
+        bytes, err = _M.write_sqlsock(self.sqlsock, resp)
+        if err ~= nil then
+            return nil, err
+        end
+        resp, typ, err = _M.recv_sql_packet(self)
+        if err then
+            return nil, err
+        end
+
+        if typ == _M.RESP_OK then
+            return _M.write_reqsock(self.reqsock, resp)
+        end
+    end
+
+    return nil, "unknown handshake error"
 end
 
 
@@ -755,24 +802,36 @@ local function _parse_field_packet(data)
 end
 
 
-function _M.recv_field_packet(self)
-    local resp, typ, err = _M.recv_sql_packet(self)
-    if not resp then
-        return nil, err
-    end
-
-    local packet = resp.data
+function _M.check_sql_field_packet(typ, packet)
     if typ == _M.RESP_ERR then
         local errno, msg, sqlstate = _parse_err_packet(packet)
         return nil, msg, errno, sqlstate
     end
 
     if typ ~= _M.RESP_DATA then
-        return nil, "bad field packet type: " .. typ
+        return nil, "invalid data"
+    end
+end
+
+
+function _M.recv_field_packet(self)
+    local resp, typ, err = _M.recv_sql_packet(self)
+    if not resp then
+        return nil, err
+    end
+
+    local packet = resp[2]
+    if typ == _M.RESP_ERR then
+        local errno, msg, sqlstate = _parse_err_packet(packet)
+        return nil, msg, errno, sqlstate
+    end
+
+    if typ ~= _M.RESP_DATA then
+        return nil, "invalid data"
     end
 
     -- typ == _M.RESP_DATA
-    self.sqldata = resp
+    self._sqldata = resp
     return
 
     --return _parse_field_packet(packet)
@@ -826,19 +885,104 @@ local function _parse_row_data_packet(data, cols, compact)
 end
 
 
-function _M.filed_list(self)
+function _M.one_packet_response(self)
+    local resp, typ, err
+    resp, typ, err = _M.recv_sql_packet(self)
+    if not resp then
+        return nil, err
+    end
 
+    local index = #self._sqldata
+    self._sqldata[index+1] = resp[1]
+    self._sqldata[index+2] = resp[2]
+end
+
+function _M.cmd_quit(self)
+    local resp, typ, err
+    resp, typ, err = _M.recv_sql_packet(self)
+    if not resp then
+        return nil, err
+    end
+
+    local index = #self._sqldata
+    self._sqldata[index+1] = resp[1]
+    self._sqldata[index+2] = resp[2]
+end
+
+
+function _M.cmd_filed_list(self, typ)
+    if typ == _M.RESP_ERR then
+        return
+    end
+
+    local resp, err
+    while true do
+        resp, typ, err = _M.recv_sql_packet(self)
+        if err ~= nil then
+            return err
+        end
+        local index = #self._sqldata
+        self._sqldata[index+1] = resp[1]
+        self._sqldata[index+2] = resp[2]
+
+        if typ == _M.RESP_EOF then
+            break
+        end
+    end
+end
+
+
+function _M.cmd_query(self)
+    local packet = self._sqldata[2]
+    local field_count, extra = _M.parse_result_set_header_packet(packet)
+
+    local resp, typ, err
+    for i = 1, field_count do
+        resp, typ, err = _M.recv_sql_packet(self)
+        if not resp then
+            return nil, err
+        end
+
+        local index = #self._sqldata
+        self._sqldata[index+1] = resp[1]
+        self._sqldata[index+2] = resp[2]
+    end
+
+    resp, typ, err = _M.recv_sql_packet(self)
+    if err then
+        return nil, err
+    end
+
+    local index = #self._sqldata
+    self._sqldata[index+1] = resp[1]
+    self._sqldata[index+2] = resp[2]
+
+    if typ ~= _M.RESP_EOF then
+        return nil, "invalid data"
+    end
+
+    while true do
+        resp, typ, err = _M.recv_sql_packet(self)
+        if not resp then
+            return nil, err
+        end
+
+        index = #self._sqldata
+        self._sqldata[index+1] = resp[1]
+        self._sqldata[index+2] = resp[2]
+
+        if typ == _M.RESP_EOF then
+            break
+        end
+    end
+
+    return nil, nil
 end
 
 
 function _M.parse_req(self, resp)
-    local data = resp.data
+    local data = resp[2]
     local cmd = strbyte(data, 1)
-    if cmd == const.COM_QUERY then
-        ngx.log(ngx.ERR, "query:" .. sub(data, 1, #data))
-    elseif cmd == const.COM_FIELD_LIST then
-        ngx.log(ngx.ERR, 'filed list')
-    end
 
     return cmd
 end

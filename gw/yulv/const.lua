@@ -1,4 +1,8 @@
-local _M = {
+local lshift = bit.lshift
+
+local _M = {}
+
+_M.cmd = {
 	COM_SLEEP               = 0,
 	COM_QUIT                = 1,
 	COM_INIT_DB             = 2,
@@ -31,6 +35,32 @@ local _M = {
 	COM_DAEMON              = 29,
 	COM_BINLOG_DUMP_GTID    = 30,
 	COM_RESET_CONNECTION    = 31,
+
+}
+
+_M.client_capabilities = {
+    	CLIENT_LONG_PASSWORD                    = lshift(1, 0),
+    	CLIENT_FOUND_ROWS                       = lshift(1, 1),
+    	CLIENT_LONG_FLAG                        = lshift(1, 2),
+    	CLIENT_CONNECT_WITH_DB                  = lshift(1, 3),
+    	CLIENT_NO_SCHEMA                        = lshift(1, 4),
+    	CLIENT_COMPRESS                         = lshift(1, 5),
+    	CLIENT_ODBC                             = lshift(1, 6),
+    	CLIENT_LOCAL_FILES                      = lshift(1, 7),
+    	CLIENT_IGNORE_SPACE                     = lshift(1, 8),
+    	CLIENT_PROTOCOL_41                      = lshift(1, 9),
+    	CLIENT_INTERACTIVE                      = lshift(1, 10),
+    	CLIENT_SSL                              = lshift(1, 11),
+    	CLIENT_IGNORE_SIGPIPE                   = lshift(1, 12),
+    	CLIENT_TRANSACTIONS                     = lshift(1, 13),
+    	CLIENT_RESERVED                         = lshift(1, 14),
+    	CLIENT_SECURE_CONNECTION                = lshift(1, 15),
+    	CLIENT_MULTI_STATEMENTS                 = lshift(1, 16),
+    	CLIENT_MULTI_RESULTS                    = lshift(1, 17),
+    	CLIENT_PS_MULTI_RESULTS                 = lshift(1, 18),
+    	CLIENT_PLUGIN_AUTH                      = lshift(1, 19),
+    	CLIENT_CONNECT_ATTRS                    = lshift(1, 20),
+    	CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA   = lshift(1, 21),
 
 }
 
