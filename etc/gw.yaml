@@ -1,1 +1,48 @@
 gw:
+  database:
+    -
+      id: 1
+      name: "test"
+      user: "test"
+      password: "test"
+    -
+      id: 2
+      name: test2
+      user: "test"
+      password: "test"
+
+  servers:
+    -
+      id: 1
+      name: "node1"
+      addr: 127.0.0.1:3306
+      databases:
+        - test1
+        - test2
+    -
+      id: 2
+      name: "node1"
+      addr: 127.0.0.1:3307
+      databases:
+        - test2
+        - test3
+
+  users:
+    -
+      id: 1
+      name: test
+      password: test
+      databases:
+        - test1
+        - test2
+    -
+      id: 2
+      name: test1
+      password: test1
+      databases:
+        - test1
+        - test2
+rules:
+  -
+    sql: 123456
+    pattern: ">="

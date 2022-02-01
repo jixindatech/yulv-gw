@@ -1,15 +1,12 @@
 local require = require
-local tcp = ngx.socket.tcp
 
-local tab = require("gw.core.table")
-local protocol     = require("gw.yulv.protocol")
-local const        = require("gw.yulv.const")
+local strbyte = string.byte
+
+local cli          = require("gw.yulv.client")
+local srv          = require("gw.yulv.server")
 
 local ngx = ngx
-local str_byte  = string.byte
 
-local conf_file = ngx.config.prefix() .. "etc/ss.yaml"
-local module = {}
 local module_name = "yulv"
 local connections = {}
 
@@ -26,105 +23,71 @@ function _M.stream_init_worker()
     return true, nil
 end
 
+
 function _M.content_phase()
+    local client = cli.new({
+        sock = ngx.req.socket()
+    })
     local key = ngx.var.remote_addr .. ":" ..ngx.var.remote_port
-    connections[key] = true
+    connections[key] = client
 
-    --[[ sql socket ]]--
-    local sqlsock, err = tcp()
-    if not sqlsock then
-        return nil, err
-    end
-    local port =  3306
-    local host = "192.168.91.1"
-    ok, err = sqlsock:connect(host, port)
-    if not ok then
-        return nil, "socke connect failed:" .. err
-    end
-
-    local sql = protocol:new({reqsock = ngx.req.socket(), sqlsock = sqlsock})
-    ok, err = sql:do_handshake()
+    local err = client:do_handshake()
     if err ~= nil then
-        ngx.log(ngx.ERR, err)
-        return
+        ngx.log(ngx.ERR, "handshake error:" .. err)
+        return err
     end
 
-    while true
-    do
-        --[[ read from client ]]--
+    local proxy
+    proxy, err = srv.get_proxy(client._user)
+    if err ~= nil then
+        return err
+    end
+    client.proxy = proxy
+
+    while true do
         local resp
-        resp, err = sql:get_reqsock_data()
-        if err then
-            return nil, "get reqsock data failed:" .. err
+        resp, err = client:get_request()
+        if err == "timeout" then
+            break
         end
 
-        --https://dev.mysql.com/doc/internals/en/text-protocol.html
-        local reqtyp = sql:parse_req(resp)
+        local data = resp[2]
+        local cmd = strbyte(data, 1)
+        --pre_hook(cmd, resp)
 
-        --[[ proxy to sql server ]]--
+        err = proxy:send_request(resp)
+        if err == "timeout" then
+            break
+        end
+
+        resp, err = proxy:get_response(cmd, resp)
+        if err == "timeout" then
+            break
+        end
+        if err ~= nil then
+            ngx.log(ngx.ERR, "err:" .. err)
+        end
+        -- post_hook(cmd, resp)
+
         local bytes
-        bytes, err = sql.write_sqlsock(sql.sqlsock, resp)
-        if err then
-            return nil, "socket send data failed:" .. err
-        end
-
-        --[[ read from sql server ]]--
-        local typ
-        resp, typ, err = sql:recv_sql_packet()
-        if err then
-            return nil, "recv sql packet failed:" .. err
-        end
-
-        sql._sqldata = resp
-
-        if reqtyp == const.cmd.COM_FIELD_LIST then
-            err = sql:cmd_filed_list(typ)
-            if err ~= nil then
-                return
-            end
-
-            bytes, err = sql.write_reqsock(sql.reqsock, sql._sqldata)
-            sql._sqldata = nil
-        elseif reqtyp == const.cmd.COM_QUERY then
-            err = sql:cmd_query()
-            bytes, err = sql.write_reqsock(sql.reqsock, sql._sqldata)
-            sql._sqldata = nil
-        elseif reqtyp == const.cmd.COM_QUIT then
-            bytes, err = sql.write_reqsock(sql.reqsock, sql._sqldata)
-            sql._sqldata = nil
-        elseif reqtyp == const.cmd.COM_PING then
-            bytes, err = sql.write_reqsock(sql.reqsock, sql._sqldata)
-            sql._sqldata = nil
-        elseif reqtyp == const.cmd.COM_INIT_DB then
-            bytes, err = sql.write_reqsock(sql.reqsock, sql._sqldata)
-            sql._sqldata = nil
-        elseif reqtyp == const.cmd.COM_STMT_PREPARE then
-            bytes, err = sql.write_reqsock(sql.reqsock, sql._sqldata)
-            sql._sqldata = nil
-        elseif reqtyp == const.cmd.COM_STMT_SEND_LONG_DATA then
-            -- no response
-        elseif reqtyp == const.cmd.COM_STMT_EXECUTE then
-            bytes, err = sql.write_reqsock(sql.reqsock, sql._sqldata)
-            sql._sqldata = nil
-        elseif reqtyp == const.cmd.COM_STMT_CLOSE then
-            -- no response
-        elseif reqtyp == const.cmd.COM_STMT_RESET then
-            bytes, err = sql.write_reqsock(sql.reqsock, sql._sqldata)
-            sql._sqldata = nil
-        elseif reqtyp == const.cmd.COM_SET_OPTION then
-            bytes, err = sql.write_reqsock(sql.reqsock, sql._sqldata)
-            sql._sqldata = nil
-        else
-            ngx.log(ngx.ERR, "unsupported command for sql")
+        bytes, err = client:send_response(cmd, resp)
+        if err == "timeout" then
+            break
         end
     end
 
-    sql.sqlsock:close()
-    return
+    return err
 end
+
 
 function _M.log_phase()
     local key = ngx.var.remote_addr .. ":" ..ngx.var.remote_port
+    local client = connections[key]
+
+    if client.proxy ~= nil then
+        client.proxy:set_keepalive()
+    end
+
     connections[key] = nil
 end
 
