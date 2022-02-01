@@ -1421,6 +1421,10 @@ function _M.send_request(self, sql)
 end
 
 
+function _M.is_quit_cmd(cmd)
+    return cmd == const.cmd.COM_QUIT
+end
+
 function _M.get_response(self, cmd)
     local resp, err
     local typ
@@ -1482,9 +1486,6 @@ function _M.get_response(self, cmd)
                 break
             end
         end
-    elseif cmd == const.cmd.COM_QUIT then
-        resp, typ, err = _recv_response_packet(self)
-        res = resp
     elseif cmd == const.cmd.COM_PING then
         resp, typ, err = _recv_response_packet(self)
         res = resp

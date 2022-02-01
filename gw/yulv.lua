@@ -55,6 +55,11 @@ function _M.content_phase()
         local cmd = strbyte(data, 1)
         --pre_hook(cmd, resp)
 
+        if proxy.is_quit_cmd(cmd) then
+            client:send_ok_packet(nil)
+            break
+        end
+
         err = proxy:send_request(resp)
         if err == "timeout" then
             break

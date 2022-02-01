@@ -41,6 +41,7 @@ local HEADER_LEN = 4
 local HEADER_OK = 0x00
 
 function _M.send_response(self, cmd, resp)
+    self._packet_no = 0
     return self._sock:send(tabconcat(resp))
 end
 
@@ -180,10 +181,17 @@ local function process_client_handshake(self)
     return nil
 end
 
-local function send_ok_packet(self, result)
+function _M.send_ok_packet(self, result)
     local header = strchar(HEADER_OK)
-    local affected_rows = utils.from_length_coded_int(self._affected_rows)
-    local insert_id = utils.from_length_coded_int(self._insert_id)
+    local affected_rows, insert_id
+    if result == nil then
+        affected_rows = utils.from_length_coded_int(0)
+        insert_id = utils.from_length_coded_int(0)
+    else
+        affected_rows = utils.from_length_coded_int(self._affected_rows)
+        insert_id = utils.from_length_coded_int(self._insert_id)
+    end
+
     local status_msg = nil
     if bor(self._capabilities, const.client_capabilities.CLIENT_PROTOCOL_41) > 0 then
         local status
@@ -218,7 +226,7 @@ function _M.do_handshake(self)
         return err
     end
 
-    err = send_ok_packet(self, nil)
+    err = _M.send_ok_packet(self, nil)
     if err ~= nil then
         return err
     end
@@ -226,17 +234,6 @@ function _M.do_handshake(self)
     self._packet_no = 0
 
     return nil
-end
-
-
-function _M.get_command_type(self, resp)
-    local data = resp[2]
-    local cmd = strbyte(data, 1)
-
-
-    if cmd == const.cmd.COM_FIELD_LIST then
-
-    end
 end
 
 
