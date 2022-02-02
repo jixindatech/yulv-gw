@@ -2,10 +2,14 @@ local require = require
 
 local strbyte = string.byte
 
+local ngx = ngx
+
+local config       = require("gw.yulv.config")
 local cli          = require("gw.yulv.client")
 local srv          = require("gw.yulv.server")
+local req_hook     = require("gw.yulv.hooks.request")
+local resp_hook    = require("gw.yulv.hooks.response")
 
-local ngx = ngx
 
 local module_name = "yulv"
 local connections = {}
@@ -20,6 +24,11 @@ local _M = { version = "0.1"}
 _M.name = module_name
 
 function _M.stream_init_worker()
+    local err = config.init_worker()
+    if err ~= nil then
+        return nil, err
+    end
+
     return true, nil
 end
 
@@ -31,18 +40,18 @@ function _M.content_phase()
     local key = ngx.var.remote_addr .. ":" ..ngx.var.remote_port
     connections[key] = client
 
-    local err = client:do_handshake()
+    local err = client:do_handshake(config.get_proxy_config)
     if err ~= nil then
         ngx.log(ngx.ERR, "handshake error:" .. err)
         return err
     end
 
     local proxy
-    proxy, err = srv.get_proxy(client._user)
+    proxy, err = srv.get_proxy(client._proxy_conf)
     if err ~= nil then
         return err
     end
-    client.proxy = proxy
+    client._proxy = proxy
 
     while true do
         local resp

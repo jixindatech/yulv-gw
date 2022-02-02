@@ -137,7 +137,7 @@ local function send_initial_handshake_packet(self)
 end
 
 
-local function process_client_handshake(self)
+local function process_client_handshake(self, find_user)
     local resp, err = _M.get_request(self)
     if err ~= nil then
         return err
@@ -166,7 +166,13 @@ local function process_client_handshake(self)
     local authlen = strbyte(data, pos)
     pos = pos + 1
     local auth = strsub(data, pos, authlen+pos)
-    local password = "123456"
+    local user_conf = find_user(user)
+    if user_conf == nil then
+        return "invalid user"
+    end
+    self._proxy_conf = user_conf
+
+    local password = user_conf.password
     local check_auth = utils.compute_token(self._salt, password, LEN_NATIVE_SCRAMBLE)
     if check_auth ~= auth then
         return nil
@@ -215,13 +221,13 @@ function _M.send_ok_packet(self, result)
 end
 
 
-function _M.do_handshake(self)
+function _M.do_handshake(self, find_user)
     local err = send_initial_handshake_packet(self)
     if err ~= nil then
         return err
     end
 
-    err = process_client_handshake(self)
+    err = process_client_handshake(self, find_user)
     if err ~= nil then
         return err
     end
@@ -256,6 +262,8 @@ function _M.new(opts)
         _packet_no = -1,
         _status = SERVER_STATUS_AUTOCOMMIT,
         _user = nil,
+        _proxy_conf = nil,
+        _proxy = nil,
         _db = nil,
         _affected_rows = 0,
         _insert_id = 0,

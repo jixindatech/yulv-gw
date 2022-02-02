@@ -19,6 +19,7 @@ dependencies = {
     "lua-tinyyaml = 1.0",
     "luafilesystem = 1.7.0-2",
     "jsonschema = 0.9.5",
+    "luautf8 = 0.1.3-1",
 }
 
 build = {

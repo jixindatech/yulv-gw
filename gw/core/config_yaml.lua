@@ -249,7 +249,7 @@ function _M.new(name, config, options)
     local init_func = options and options.init_func
     local module_schema = options and options.schema
     local conf_version = options and options.conf_version
-    ngx.log(ngx.ERR, "module name:" .. name)
+
     local module = setmetatable({
         name = name,
         key = name,
@@ -271,8 +271,8 @@ function _M.new(name, config, options)
         ngx_timer_at(0, _automatic_fetch, module)
     end
 
-    if key then
-        created_obj[key] = obj
+    if name then
+        created_obj[name] = module
     end
 
     return module, nil

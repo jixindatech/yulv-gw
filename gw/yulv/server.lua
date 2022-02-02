@@ -1109,7 +1109,7 @@ function _M.set_timeout(self, timeout)
 end
 
 
-function _M.new(self)
+local function new(self)
     local sock, err = tcp()
     if not sock then
         return nil, err
@@ -1534,14 +1534,16 @@ function _M.cmd_filed_list(self, typ)
     end
 end
 
-function _M.get_proxy(user)
-    local proxy = _M.new()
+function _M.get_proxy(conf)
+    local proxy = new()
 
     local options = {
-        host = "192.168.91.1",
-        port = 3306,
-        user = "root",
-        password = "123456"
+        host = conf.database.host,
+        port = conf.database.port,
+        user = conf.database.user,
+        password = conf.database.password,
+        database = conf.database.name,
+        charset = "utf8"
     }
     local _, err = proxy:connect(options)
     if err ~= nil then
