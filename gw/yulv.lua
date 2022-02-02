@@ -1,6 +1,7 @@
 local require = require
 
 local strbyte = string.byte
+local strsub  = string.sub
 
 local ngx = ngx
 
@@ -62,7 +63,8 @@ function _M.content_phase()
 
         local data = resp[2]
         local cmd = strbyte(data, 1)
-        --pre_hook(cmd, resp)
+        data = strsub(data, 2)
+        req_hook.request(cmd, data)
 
         if proxy.is_quit_cmd(cmd) then
             client:send_ok_packet(nil)

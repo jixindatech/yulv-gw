@@ -1,6 +1,8 @@
 
 local schema = require("gw.schema")
 local config = require("gw.core.config")
+local const  = require("gw.yulv.const")
+local fingerprint = require("gw.yulv.hooks.fingerprint")
 
 local _M = {}
 local module_name = "request"
@@ -53,8 +55,10 @@ function _M.init_worker(conf)
 
 end
 
-function _M.request(cmd, resp)
-
+function _M.request(cmd, data)
+    if cmd == const.cmd.COM_QUERY then
+        fingerprint.parse(data)
+    end
 end
 
 function _M.log()
