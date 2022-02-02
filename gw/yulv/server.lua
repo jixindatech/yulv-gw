@@ -1435,6 +1435,11 @@ function _M.get_response(self, cmd)
             if err ~= nil then
                 return err
             end
+
+            if typ == RESP_ERR then
+                return resp
+            end
+
             local index = #res
             res[index+1] = resp[1]
             res[index+2] = resp[2]
@@ -1445,8 +1450,11 @@ function _M.get_response(self, cmd)
         end
     elseif cmd == const.cmd.COM_QUERY then
         resp, typ, err = _recv_response_packet(self)
-        local field_count, extra = _parse_result_set_header_packet(resp[2])
+        if typ == RESP_ERR then
+            return resp
+        end
 
+        local field_count, extra = _parse_result_set_header_packet(resp[2])
         res = resp
         for i = 1, field_count do
             resp, typ, err = _recv_response_packet(self)
@@ -1488,25 +1496,49 @@ function _M.get_response(self, cmd)
         end
     elseif cmd == const.cmd.COM_PING then
         resp, typ, err = _recv_response_packet(self)
+        if typ == RESP_ERR then
+            return resp
+        end
+
         res = resp
     elseif cmd == const.cmd.COM_INIT_DB then
         resp, typ, err = _recv_response_packet(self)
+        if typ == RESP_ERR then
+            return resp
+        end
+
         res = resp
     elseif cmd == const.cmd.COM_STMT_PREPARE then
         resp, typ, err = _recv_response_packet(self)
+        if typ == RESP_ERR then
+            return resp
+        end
+
         res = resp
     elseif cmd == const.cmd.COM_STMT_SEND_LONG_DATA then
         -- no response
     elseif cmd == const.cmd.COM_STMT_EXECUTE then
         resp, typ, err = _recv_response_packet(self)
+        if typ == RESP_ERR then
+            return resp
+        end
+
         res = resp
     elseif cmd == const.cmd.COM_STMT_CLOSE then
         -- no response
     elseif cmd == const.cmd.COM_STMT_RESET then
         resp, typ, err = _recv_response_packet(self)
+        if typ == RESP_ERR then
+            return resp
+        end
+
         res = resp
     elseif cmd == const.cmd.COM_SET_OPTION then
         resp, typ, err = _recv_response_packet(self)
+        if typ == RESP_ERR then
+            return resp
+        end
+
         res = resp
     else
         ngx.log(ngx.ERR, "unsupported command for sql")
