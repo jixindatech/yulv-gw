@@ -24,6 +24,24 @@ users:
         host: 127.0.0.1
         port: 3306
 
+ip:
+  -
+    id: 1
+    timestamp: 1
+    config:
+      type: deny
+      data:
+        - 192.168.1.2/32
+        - 192.168.1.1/32
+  -
+    id: 2
+    timestamp: 1
+    config:
+      type: allow
+      data:
+        - 192.168.1.2/32
+        - 192.168.1.1/32
+
 rules:
   -
     sql: 123456

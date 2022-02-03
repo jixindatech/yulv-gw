@@ -20,6 +20,7 @@ dependencies = {
     "luafilesystem = 1.7.0-2",
     "jsonschema = 0.9.5",
     "luautf8 = 0.1.3-1",
+    "lua-resty-iputils = 0.3.0-1",
 }
 
 build = {

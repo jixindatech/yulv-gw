@@ -52,7 +52,7 @@ local stateName  = {
      "inNumberInWord",
 }
 
-local Debug = true
+local Debug = false
 local ReplaceNumbersInWords = false
 
 local function isSpace(r)
@@ -653,7 +653,6 @@ function _M.parse(data)
         ::CONTINUE::
     end
 
-    ngx.log(ngx.ERR, "size:" .. #f)
     --// Remove trailing spaces.
     while true
     do

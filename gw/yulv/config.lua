@@ -28,11 +28,11 @@ local module_schema = {
                         password = { type = "string"}
                     },
                     required = {"host", "port", "name", "password"},
-                },
+                }
             }
-        },
-        required = {"id", "timestamp", "config"},
-    }
+        }
+    },
+    required = {"id", "timestamp", "config"},
 }
 
 function _M.init_worker()

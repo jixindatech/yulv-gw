@@ -8,6 +8,7 @@ local ngx = ngx
 local config       = require("gw.yulv.config")
 local cli          = require("gw.yulv.client")
 local srv          = require("gw.yulv.server")
+local access_hook  = require("gw.yulv.hooks.access")
 local req_hook     = require("gw.yulv.hooks.request")
 local resp_hook    = require("gw.yulv.hooks.response")
 
@@ -30,15 +31,30 @@ function _M.stream_init_worker()
         return nil, err
     end
 
+    err = access_hook.init_worker()
+    if err ~= nil then
+        return nil, err
+    end
+
     return true, nil
 end
 
 
 function _M.content_phase()
+    local pass = false
+    local ip = ngx.var.remote_addr
+    local port = ngx.var.remote_port
+    local res = access_hook.access(ip)
+    if res == "allow" then
+        pass = true
+    elseif res == "deny" then
+        return "deny"
+    end
+
     local client = cli.new({
         sock = ngx.req.socket()
     })
-    local key = ngx.var.remote_addr .. ":" ..ngx.var.remote_port
+    local key = ip.. ":" .. port
     connections[key] = client
 
     local err = client:do_handshake(config.get_proxy_config)
@@ -63,8 +79,10 @@ function _M.content_phase()
 
         local data = resp[2]
         local cmd = strbyte(data, 1)
-        data = strsub(data, 2)
-        req_hook.request(cmd, data)
+        if pass == false then
+            data = strsub(data, 2)
+            err = req_hook.request(cmd, data)
+        end
 
         if proxy.is_quit_cmd(cmd) then
             client:send_ok_packet(nil)
@@ -83,7 +101,11 @@ function _M.content_phase()
         if err ~= nil then
             ngx.log(ngx.ERR, "err:" .. err)
         end
-        -- post_hook(cmd, resp)
+
+        if pass == false then
+            data = strsub(data, 2)
+            err = resp_hook.response(cmd, data)
+        end
 
         local bytes
         bytes, err = client:send_response(cmd, resp)

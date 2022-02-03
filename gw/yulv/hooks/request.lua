@@ -1,3 +1,5 @@
+local strlen = string.len
+local strsub = string.sub
 
 local schema = require("gw.schema")
 local config = require("gw.core.config")
@@ -7,6 +9,7 @@ local fingerprint = require("gw.yulv.hooks.fingerprint")
 local _M = {}
 local module_name = "request"
 local module
+
 
 local rule_schema = {
     type = "object",
@@ -38,6 +41,25 @@ local rule_schema = {
     }
 }
 
+local tokens = {
+    insert      = 1,
+    update      = 2,
+    delete      = 3,
+    replace     = 4,
+    set         = 5,
+    begin       = 6,
+    commit      = 7,
+    rollback    = 8,
+    admin       = 9,
+    select      = 10,
+    use         = 11,
+    start       = 12,
+    transaction = 13,
+    show        = 14,
+    truncate    = 15,
+}
+
+
 function _M.init_worker(conf)
     local options = {
         key = module_name,
@@ -52,7 +74,23 @@ function _M.init_worker(conf)
         return err
     end
 
+end
 
+local function  is_sql_sep(r)
+    return r == ' ' or r == ',' or
+    r == '\t' or r == '/' or
+    r == '\n' or r == '\r'
+end
+
+local function get_sql_type(sql)
+    for i=1,strlen(sql) do
+        local char = strsub(sql, i, i)
+        if is_sql_sep(char) then
+            return strsub(sql, 1, i)
+        end
+    end
+
+    return nil
 end
 
 function _M.request(cmd, data)
