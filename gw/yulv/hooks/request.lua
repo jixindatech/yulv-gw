@@ -102,10 +102,10 @@ local function get_sql_type(sql)
     return nil
 end
 
-function _M.request(ip, cmd, data)
+function _M.request(ip, cmd, data, context)
     if cmd == const.cmd.COM_QUERY then
         local fp = fingerprint.parse(data)
-        local sqltype = get_sql_type(data)
+        context.sqltype = get_sql_type(data)
 
         if module ~= nil and module.values ~= nil and #module.values > 0 then
             for _, item in ipairs(module.values) do
@@ -114,7 +114,7 @@ function _M.request(ip, cmd, data)
                     goto CONTINUE
                 end
 
-                if rule.matcher.type ~= nil and rule.matcher.type ~= sqltype then
+                if rule.matcher.type ~= nil and rule.matcher.type ~= context.sqltype then
                     goto CONTINUE
                 end
 
@@ -127,6 +127,7 @@ function _M.request(ip, cmd, data)
                     if err ~= nil then
                         ngx.log(ngx.ERR, "match " .. rule.matcher.string.match .. " error:" .. err)
                     end
+
                     if res ~= nil then
                         goto CONTINUE
                     end

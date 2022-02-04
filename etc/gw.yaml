@@ -66,4 +66,32 @@ reqrules:
           pattern: "12"
       action: log
 
+resprules:
+  -
+    id: 1
+    timestamp: 1
+    config:
+      matcher:
+        ip: 127.0.0.1
+        type: select
+        string:
+          match: re
+          pattern: "12"
+        affected:
+          match: ge
+          pattern: 10
+
+      action: log
+  -
+    id: 2
+    timestamp: 1
+    config:
+      matcher:
+        ip: 127.0.0.1
+        type: select
+        string:
+          match: re
+          pattern: "12"
+      action: log
+
 #END

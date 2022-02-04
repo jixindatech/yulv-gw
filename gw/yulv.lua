@@ -49,10 +49,10 @@ function _M.content_phase()
     local pass = false
     local ip = ngx.var.remote_addr
     local port = ngx.var.remote_port
-    local res = access_hook.access(ip)
-    if res == "allow" then
+    local action = access_hook.access(ip)
+    if action == "allow" then
         pass = true
-    elseif res == "deny" then
+    elseif action == "deny" then
         return "deny"
     end
 
@@ -76,17 +76,25 @@ function _M.content_phase()
     client._proxy = proxy
 
     while true do
-        local resp
-        resp, err = client:get_request()
+        local context = new_tab(10, 0)
+
+        local req
+        req, err = client:get_request()
         if err == "timeout" then
             break
         end
 
-        local data = resp[2]
+        local data = req[2]
         local cmd = strbyte(data, 1)
         if pass == false then
             data = strsub(data, 2)
-            err = req_hook.request(ip, cmd, data)
+            action = req_hook.request(ip, cmd, data, context)
+
+            if action == "deny" then
+                return "denied"
+            elseif action == "allow" then
+                pass = true
+            end
         end
 
         if proxy.is_quit_cmd(cmd) then
@@ -94,12 +102,13 @@ function _M.content_phase()
             break
         end
 
-        err = proxy:send_request(resp)
+        err = proxy:send_request(req)
         if err == "timeout" then
             break
         end
 
-        resp, err = proxy:get_response(cmd, resp)
+        local resp
+        resp, err = proxy:get_response(cmd, context)
         if err == "timeout" then
             break
         end
@@ -109,7 +118,7 @@ function _M.content_phase()
 
         if pass == false then
             data = strsub(data, 2)
-            err = resp_hook.response(ip, cmd, data)
+            err = resp_hook.response(ip, cmd, context)
         end
 
         local bytes

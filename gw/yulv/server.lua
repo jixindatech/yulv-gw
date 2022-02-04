@@ -1425,7 +1425,7 @@ function _M.is_quit_cmd(cmd)
     return cmd == const.cmd.COM_QUIT
 end
 
-function _M.get_response(self, cmd)
+function _M.get_response(self, cmd, context)
     local resp, err
     local typ
     local res = {}

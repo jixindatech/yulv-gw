@@ -53,7 +53,7 @@ function _M.init_worker(conf)
 
 end
 
-function _M.response(ip, cmd, resp)
+function _M.response(ip, cmd, context)
 
 end
 
