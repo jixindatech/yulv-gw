@@ -656,9 +656,8 @@ function _M.parse(data)
     --// Remove trailing spaces.
     while true
     do
-        if fi > 0 and isSpace(f[fi]) then
-            fi = fi - 1
-        else
+        fi = fi-1
+        if fi > 0 and isSpace(strbyte(f[fi])) == false then
             break
         end
     end

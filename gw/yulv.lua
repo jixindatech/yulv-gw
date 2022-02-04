@@ -36,6 +36,11 @@ function _M.stream_init_worker()
         return nil, err
     end
 
+    err = req_hook.init_worker()
+    if err ~= nil then
+        return nil, err
+    end
+
     return true, nil
 end
 
@@ -81,7 +86,7 @@ function _M.content_phase()
         local cmd = strbyte(data, 1)
         if pass == false then
             data = strsub(data, 2)
-            err = req_hook.request(cmd, data)
+            err = req_hook.request(ip, cmd, data)
         end
 
         if proxy.is_quit_cmd(cmd) then
@@ -104,7 +109,7 @@ function _M.content_phase()
 
         if pass == false then
             data = strsub(data, 2)
-            err = resp_hook.response(cmd, data)
+            err = resp_hook.response(ip, cmd, data)
         end
 
         local bytes

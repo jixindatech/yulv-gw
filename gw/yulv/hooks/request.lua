@@ -1,17 +1,25 @@
+local ipairs = ipairs
 local strlen = string.len
 local strsub = string.sub
 
+local cjson = require("cjson.safe")
 local schema = require("gw.schema")
 local config = require("gw.core.config")
 local const  = require("gw.yulv.const")
 local fingerprint = require("gw.yulv.hooks.fingerprint")
+local match = require("gw.yulv.hooks.match")
 
 local _M = {}
-local module_name = "request"
+local module_name = "reqrules"
 local module
 
+local remote_addr_def = {
+    description = "client IP",
+    type = "string",
+    anyOf = schema.ip_def,
+}
 
-local rule_schema = {
+local module_schema = {
     type = "object",
     properties = {
         id = schema.id_schema,
@@ -19,25 +27,19 @@ local rule_schema = {
         config = {
             type = "object",
             properties = {
-                action = { type = "integer" },
-                decoders = {
+                ip = { type = remote_addr_def },
+                type = { type = "string" },
+                fingerprint = { type = "string" },
+                string = {
                     type = "object",
                     properties = {
-                        form = { type = "boolean", default = false },
-                        json = { type = "boolean", default = false },
-                        multipart = { type = "boolean", default = false }
+                        match = { type = "string"},
+                        pattern = { type = "string"}
                     }
-                },
-                batch = {
-                    type = "array",
-                    items = schema.id_schema,
-                },
-                specific = {
-                    type = "array",
-                    items = schema.id_schema,
                 }
             }
-        }
+        },
+        required = {"id", "timestamp", "config"},
     }
 }
 
@@ -63,7 +65,7 @@ local tokens = {
 function _M.init_worker(conf)
     local options = {
         key = module_name,
-        schema = rule_schema,
+        schema = module_schema,
         automatic = true,
         interval = 10,
     }
@@ -83,19 +85,62 @@ local function  is_sql_sep(r)
 end
 
 local function get_sql_type(sql)
+    local start = -1
     for i=1,strlen(sql) do
-        local char = strsub(sql, i, i)
-        if is_sql_sep(char) then
-            return strsub(sql, 1, i)
+        local chr = strsub(sql, i, i)
+        if is_sql_sep(chr) then
+            if start ~= -1 then
+                return strsub(sql, start, i - 1)
+            end
+        else
+            if start == -1 then
+                start = i
+            end
         end
     end
 
     return nil
 end
 
-function _M.request(cmd, data)
+function _M.request(ip, cmd, data)
     if cmd == const.cmd.COM_QUERY then
-        local print = fingerprint.parse(data)
+        local fp = fingerprint.parse(data)
+        local sqltype = get_sql_type(data)
+
+        if module ~= nil and module.values ~= nil and #module.values > 0 then
+            for _, item in ipairs(module.values) do
+                local rule = item.value
+                if rule.matcher.ip ~= nil and rule.matcher.ip ~= ip then
+                    goto CONTINUE
+                end
+
+                if rule.matcher.type ~= nil and rule.matcher.type ~= sqltype then
+                    goto CONTINUE
+                end
+
+                if rule.matcher.fingerprint ~= nil and rule.matcher.fingerprint ~= fp then
+                    goto CONTINUE
+                end
+
+                if rule.matcher.string ~= nil then
+                    local res, err = match[rule.matcher.string.match](data, rule.matcher.string.pattern)
+                    if err ~= nil then
+                        ngx.log(ngx.ERR, "match " .. rule.matcher.string.match .. " error:" .. err)
+                    end
+                    if res ~= nil then
+                        goto CONTINUE
+                    end
+                end
+
+                if true then
+                    return  rule.matcher.action
+                end
+
+                ::CONTINUE::
+            end
+
+            return nil
+        end
     end
 end
 

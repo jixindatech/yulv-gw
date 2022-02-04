@@ -31,7 +31,7 @@ ip:
     config:
       type: deny
       data:
-        - 192.168.1.2/32
+        - 192.168.91.1
         - 192.168.1.1/32
   -
     id: 2
@@ -39,12 +39,31 @@ ip:
     config:
       type: allow
       data:
+        - 192.168.91.2/32
         - 192.168.1.2/32
-        - 192.168.1.1/32
 
-rules:
+reqrules:
   -
-    sql: 123456
-    pattern: ">="
+    id: 1
+    timestamp: 1
+    config:
+      matcher:
+        ip: 127.0.0.1
+        type: select
+        string:
+          match: re
+          pattern: "12"
+      action: log
+  -
+    id: 2
+    timestamp: 1
+    config:
+      matcher:
+        ip: 127.0.0.1
+        type: select
+        string:
+          match: re
+          pattern: "12"
+      action: log
 
 #END

@@ -287,8 +287,8 @@ _M.route = {
                 host = host_def,
                 uri = { type = "string" },
                 upstream_id = id_schema,
-                required = {"host", "uri", "upstream_id"}
-            }
+            },
+            required = {"host", "uri", "upstream_id"}
         }
     },
     anyOf = {
