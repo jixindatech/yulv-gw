@@ -4,6 +4,7 @@ local strchar = string.char
 local strsub = string.sub
 local strrep = string.rep
 local strbyte = string.byte
+local strlen = string.len
 
 local bit = bit
 local lshift = bit.lshift
@@ -17,6 +18,7 @@ local tabconcat = table.concat
 
 local utils = require("gw.utils.util")
 local const = require("gw.yulv.const")
+local fingerprint = require("gw.yulv.hooks.fingerprint")
 
 local _M = {}
 local mt = { __index = _M }
@@ -40,7 +42,7 @@ local DEFAULT_CAPABILITY = bor(
 local HEADER_LEN = 4
 local HEADER_OK = 0x00
 
-function _M.send_response(self, cmd, resp)
+function _M.send_response(self, resp)
     self._packet_no = 0
     return self._sock:send(tabconcat(resp))
 end
@@ -187,6 +189,12 @@ local function process_client_handshake(self, find_user)
     return nil
 end
 
+
+function _M.send_error_packet(self, err)
+
+end
+
+
 function _M.send_ok_packet(self, result)
     local header = strchar(HEADER_OK)
     local affected_rows, insert_id
@@ -242,6 +250,49 @@ function _M.do_handshake(self, find_user)
     return nil
 end
 
+local function  is_sql_sep(r)
+    return r == ' ' or r == ',' or
+            r == '\t' or r == '/' or
+            r == '\n' or r == '\r'
+end
+
+local function get_sql_type(sql)
+    local start = -1
+    for i=1,strlen(sql) do
+        local chr = strsub(sql, i, i)
+        if is_sql_sep(chr) then
+            if start ~= -1 then
+                return strsub(sql, start, i - 1)
+            end
+        else
+            if start == -1 then
+                start = i
+            end
+        end
+    end
+
+    return nil
+end
+
+function _M.handle_request(self, req, context)
+    local data = req[2]
+    local cmd = strbyte(data, 1)
+    data = strsub(data, 2)
+
+    self._packet_no = strbyte(req[1], 4, 4)
+
+    context.fingerprint = fingerprint.parse(data)
+    context.sqltype = get_sql_type(data)
+    context.cmd = cmd
+    context.data = data
+
+    if cmd == const.cmd.COM_INIT_DB then
+        self._db = data
+        context.db = data
+    end
+
+    return nil
+end
 
 function _M.new(opts)
     if opts == nil or opts.sock == nil then

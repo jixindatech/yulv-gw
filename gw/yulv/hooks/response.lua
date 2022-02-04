@@ -50,10 +50,9 @@ function _M.init_worker(conf)
         return err
     end
 
-
 end
 
-function _M.response(ip, cmd, context)
+function _M.response(context)
 
 end
 

@@ -6,7 +6,6 @@ local cjson = require("cjson.safe")
 local schema = require("gw.schema")
 local config = require("gw.core.config")
 local const  = require("gw.yulv.const")
-local fingerprint = require("gw.yulv.hooks.fingerprint")
 local match = require("gw.yulv.hooks.match")
 
 local _M = {}
@@ -78,35 +77,15 @@ function _M.init_worker(conf)
 
 end
 
-local function  is_sql_sep(r)
-    return r == ' ' or r == ',' or
-    r == '\t' or r == '/' or
-    r == '\n' or r == '\r'
-end
+function _M.request(context)
+    local ip = context.ip
+    local cmd = context.cmd
+    local fp = context.fingerprint
+    local db = context.db
+    local sqltype = context.sqltype
+    local data = context.data
 
-local function get_sql_type(sql)
-    local start = -1
-    for i=1,strlen(sql) do
-        local chr = strsub(sql, i, i)
-        if is_sql_sep(chr) then
-            if start ~= -1 then
-                return strsub(sql, start, i - 1)
-            end
-        else
-            if start == -1 then
-                start = i
-            end
-        end
-    end
-
-    return nil
-end
-
-function _M.request(ip, cmd, data, context)
     if cmd == const.cmd.COM_QUERY then
-        local fp = fingerprint.parse(data)
-        context.sqltype = get_sql_type(data)
-
         if module ~= nil and module.values ~= nil and #module.values > 0 then
             for _, item in ipairs(module.values) do
                 local rule = item.value
@@ -114,7 +93,11 @@ function _M.request(ip, cmd, data, context)
                     goto CONTINUE
                 end
 
-                if rule.matcher.type ~= nil and rule.matcher.type ~= context.sqltype then
+                if rule.matcher.database ~= nil and rule.matcher.database ~= db then
+                    goto CONTINUE
+                end
+
+                if rule.matcher.type ~= nil and rule.matcher.type ~= sqltype then
                     goto CONTINUE
                 end
 

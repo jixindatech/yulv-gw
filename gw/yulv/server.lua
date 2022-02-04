@@ -1421,14 +1421,16 @@ function _M.send_request(self, sql)
 end
 
 
-function _M.is_quit_cmd(cmd)
-    return cmd == const.cmd.COM_QUIT
+function _M.is_quit_cmd(context)
+    return context.cmd == const.cmd.COM_QUIT
 end
 
-function _M.get_response(self, cmd, context)
+function _M.get_response(self, context)
     local resp, err
     local typ
     local res = {}
+    local cmd = context.cmd
+
     if cmd == const.cmd.COM_FIELD_LIST then
         while true do
             resp, typ, err = _recv_response_packet(self)
@@ -1444,6 +1446,7 @@ function _M.get_response(self, cmd, context)
             res[index+1] = resp[1]
             res[index+2] = resp[2]
 
+            context.filed_count = context.filed_count + 1
             if typ == RESP_EOF then
                 break
             end
@@ -1467,6 +1470,8 @@ function _M.get_response(self, cmd, context)
             res[index+2] = resp[2]
         end
 
+        context.filed_count = field_count
+
         resp, typ, err = _recv_response_packet(self)
         if err then
             return nil, err
@@ -1489,6 +1494,8 @@ function _M.get_response(self, cmd, context)
             index = #res
             res[index+1] = resp[1]
             res[index+2] = resp[2]
+
+            context.record_count = context.record_count + 1
 
             if typ == RESP_EOF then
                 break

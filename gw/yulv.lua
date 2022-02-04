@@ -44,6 +44,18 @@ function _M.stream_init_worker()
     return true, nil
 end
 
+local function new_context(ip, db)
+    local context = new_tab(10, 0)
+    context.client = ip
+    context.db = db
+    context.cmd = 0
+    context.filed_count = 0
+    context.record_count = 0
+    context.sqltype = nil
+    context.fingerprint = nil
+
+    return context
+end
 
 function _M.content_phase()
     local pass = false
@@ -76,7 +88,7 @@ function _M.content_phase()
     client._proxy = proxy
 
     while true do
-        local context = new_tab(10, 0)
+        local context = new_context(ip, client._db)
 
         local req
         req, err = client:get_request()
@@ -84,12 +96,14 @@ function _M.content_phase()
             break
         end
 
-        local data = req[2]
-        local cmd = strbyte(data, 1)
-        if pass == false then
-            data = strsub(data, 2)
-            action = req_hook.request(ip, cmd, data, context)
+        err = client:handle_request(req, context)
+        if err ~= nil then
+            client:send_error_packet(nil)
+            goto CONTINUE
+        end
 
+        if pass == false then
+            action = req_hook.request(context)
             if action == "deny" then
                 return "denied"
             elseif action == "allow" then
@@ -97,7 +111,7 @@ function _M.content_phase()
             end
         end
 
-        if proxy.is_quit_cmd(cmd) then
+        if proxy.is_quit_cmd(context) then
             client:send_ok_packet(nil)
             break
         end
@@ -108,7 +122,7 @@ function _M.content_phase()
         end
 
         local resp
-        resp, err = proxy:get_response(cmd, context)
+        resp, err = proxy:get_response(context)
         if err == "timeout" then
             break
         end
@@ -117,15 +131,16 @@ function _M.content_phase()
         end
 
         if pass == false then
-            data = strsub(data, 2)
-            err = resp_hook.response(ip, cmd, context)
+            err = resp_hook.response(context)
         end
 
         local bytes
-        bytes, err = client:send_response(cmd, resp)
+        bytes, err = client:send_response(resp)
         if err == "timeout" then
             break
         end
+
+        ::CONTINUE::
     end
 
     return err
