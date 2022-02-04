@@ -5,6 +5,7 @@ local strsub = string.sub
 local strrep = string.rep
 local strbyte = string.byte
 local strlen = string.len
+local strfmt = string.format
 
 local bit = bit
 local lshift = bit.lshift
@@ -15,10 +16,14 @@ local band = bit.band
 local math = math
 
 local tabconcat = table.concat
+local tabunpack = table.unpack
 
 local utils = require("gw.utils.util")
 local const = require("gw.yulv.const")
 local fingerprint = require("gw.yulv.hooks.fingerprint")
+local errstate = require("gw.yulv.errstate")
+local errmsg = require("gw.yulv.errmsg")
+local errno = require("gw.yulv.errno")
 
 local _M = {}
 local mt = { __index = _M }
@@ -190,8 +195,32 @@ local function process_client_handshake(self, find_user)
 end
 
 
-function _M.send_error_packet(self, err)
+function _M.send_error_packet(self, err_str, err)
+    local state, msg
+    if errmsg[err_str] ~= nil then
+        msg = strfmt(errmsg[err_str], tabunpack(err))
+    else
+        msg = err[1]
+    end
 
+    local header = strchar(const.ERR_HEADER)
+    local code = utils.set_byte2(errno[err_str])
+    if self._capabilities and const.client_capabilities.CLIENT_PROTOCOL_41 > 0 then
+        state = errstate[errno]
+        if state == nil then
+            state = errstate.DEFAULT_MYSQL_STATE
+        end
+        state = "#" .. state
+    end
+
+    local packet
+    if state == nil then
+        packet = header .. code .. msg
+    else
+        packet = header .. code .. state .. msg
+    end
+
+    return _M.send_packet(self, packet, #packet)
 end
 
 
@@ -280,15 +309,14 @@ function _M.handle_request(self, req, context)
     data = strsub(data, 2)
 
     self._packet_no = strbyte(req[1], 4, 4)
-
-    context.fingerprint = fingerprint.parse(data)
-    context.sqltype = get_sql_type(data)
     context.cmd = cmd
     context.data = data
-
     if cmd == const.cmd.COM_INIT_DB then
         self._db = data
         context.db = data
+    elseif cmd == const.cmd.COM_QUERY then
+        context.fingerprint = fingerprint.parse(data)
+        context.sqltype = get_sql_type(data)
     end
 
     return nil

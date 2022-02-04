@@ -865,7 +865,7 @@ local _M = {
     ER_ALTER_OPERATION_NOT_SUPPORTED_REASON_NOT_NULL                           = 1861,
     ER_MUST_CHANGE_PASSWORD_LOGIN                                              = 1862,
     ER_ROW_IN_WRONG_PARTITION                                                  = 1863,
-    ER_ERROR_LAST                                                              = 1863,
+    ER_ERROR_LAST                                                              = 1864,
 }
 
 return _M

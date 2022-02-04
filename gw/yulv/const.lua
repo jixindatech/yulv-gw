@@ -2,6 +2,8 @@ local lshift = bit.lshift
 
 local _M = {}
 
+_M.ERR_HEADER = 0xff
+
 _M.cmd = {
 	COM_SLEEP               = 0,
 	COM_QUIT                = 1,

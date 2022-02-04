@@ -11,7 +11,7 @@ local srv          = require("gw.yulv.server")
 local access_hook  = require("gw.yulv.hooks.access")
 local req_hook     = require("gw.yulv.hooks.request")
 local resp_hook    = require("gw.yulv.hooks.response")
-
+local errno        = require("gw.yulv.errno")
 
 local module_name = "yulv"
 local connections = {}
@@ -98,7 +98,7 @@ function _M.content_phase()
 
         err = client:handle_request(req, context)
         if err ~= nil then
-            client:send_error_packet(nil)
+            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
             goto CONTINUE
         end
 
