@@ -96,9 +96,13 @@ function _M.content_phase()
             break
         end
 
-        err = client:handle_request(req, context)
+        ok, err = client:handle_request(req, context)
         if err ~= nil then
             client:send_error_packet("ER_UNKNOWN_ERROR", {err})
+            goto CONTINUE
+        end
+
+        if ok then
             goto CONTINUE
         end
 

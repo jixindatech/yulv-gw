@@ -310,16 +310,38 @@ function _M.handle_request(self, req, context)
 
     self._packet_no = strbyte(req[1], 4, 4)
     context.cmd = cmd
-    context.data = data
     if cmd == const.cmd.COM_INIT_DB then
         self._db = data
         context.db = data
+    elseif cmd == const.cmd.COM_PING then
+        local err = _M.send_ok_packet(nil)
+        if err ~= nil then
+            return nil, err
+        end
+        return true, nil
     elseif cmd == const.cmd.COM_QUERY then
+        context.data = data
         context.fingerprint = fingerprint.parse(data)
         context.sqltype = get_sql_type(data)
+    elseif cmd == const.cmd.COM_FIELD_LIST then
+        return nil, nil
+    elseif cmd == const.cmd.COM_STMT_PREPARE then
+        return nil, nil
+    elseif cmd == const.cmd.COM_STMT_EXECUTE then
+        return nil, nil
+    elseif cmd == const.cmd.COM_STMT_CLOSE then
+        return nil, nil
+    elseif cmd == const.cmd.COM_STMT_SEND_LONG_DATA then
+        return nil, nil
+    elseif cmd == const.cmd.COM_STMT_RESET then
+        return nil, nil
+    elseif cmd == const.cmd.COM_SET_OPTION then
+        return nil, nil
+    else
+        return nil, strfmt("command %d not unsupported ", cmd)
     end
 
-    return nil
+    return nil, nil
 end
 
 function _M.new(opts)
