@@ -29,6 +29,7 @@ local remote_addr_def = {
     type = "string",
     anyOf = ip_def,
 }
+_M.remote_addr_def = remote_addr_def
 
 local host_def_pat = "^\\*?[0-9a-zA-Z-.]+$"
 local host_def = {

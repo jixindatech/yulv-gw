@@ -12,12 +12,6 @@ local _M = {}
 local module_name = "reqrules"
 local module
 
-local remote_addr_def = {
-    description = "client IP",
-    type = "string",
-    anyOf = schema.ip_def,
-}
-
 local module_schema = {
     type = "object",
     properties = {
@@ -26,7 +20,9 @@ local module_schema = {
         config = {
             type = "object",
             properties = {
-                ip = { type = remote_addr_def },
+                ip = { type = schema.remote_addr_def },
+                user = { type = "string" },
+                database = { type = "string" },
                 type = { type = "string" },
                 fingerprint = { type = "string" },
                 string = {
@@ -35,7 +31,9 @@ local module_schema = {
                         match = { type = "string"},
                         pattern = { type = "string"}
                     }
-                }
+                },
+                rows = { type = "integer"},
+                action = { type = "integer", minimum = 1},
             }
         },
         required = {"id", "timestamp", "config"},

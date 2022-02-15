@@ -21,6 +21,8 @@ dependencies = {
     "jsonschema = 0.9.5",
     "luautf8 = 0.1.3-1",
     "lua-resty-iputils = 0.3.0-1",
+    "lua-resty-logger-socket = 2.0",
+    "lua-resty-kafka = 0.09",
 }
 
 build = {
