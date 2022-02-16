@@ -1,0 +1,52 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "max_result_window": 20000000
+  },
+
+  "mappings": {
+    "properties": {
+      "id": {
+        "type": "integer"
+      },
+      "timestamp" : {
+        "type" : "long"
+      },
+      "ip": {
+        "type": "text",
+        "fielddata": true
+      },
+      "user": {
+        "type": "text",
+        "fielddata": true
+      },
+      "event": {
+        "type": "text",
+        "fielddata": true
+      },
+      "database": {
+        "type": "text",
+        "fielddata": true
+      },
+      "type": {
+        "type": "text",
+        "fielddata": true
+      },
+      "sql": {
+        "type": "text",
+        "fielddata": true
+      },
+      "fingerprint": {
+        "type": "text",
+        "fielddata": true
+      },
+      "rows": {
+        "type" : "long"
+      },
+      "action": {
+        "type" : "long"
+      }
+    }
+  }
+}

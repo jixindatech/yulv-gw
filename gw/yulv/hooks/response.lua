@@ -4,7 +4,7 @@ local config = require("gw.core.config")
 local const  = require("gw.yulv.const")
 local match = require("gw.yulv.hooks.match")
 local _M = {}
-local module_name = "resprules"
+local module_name = "resprule"
 local module
 
 local module_schema = {
@@ -96,6 +96,7 @@ function _M.response(context)
                 end
 
                 if true then
+                    context.rule_id = rule.id
                     return  rule.matcher.action
                 end
 

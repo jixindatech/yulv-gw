@@ -20,6 +20,11 @@ function _M.stream_init()
         return err
     end
 
+    local logconf = config.get_config_log()
+    if logconf == nil then
+        return "missed log configuration"
+    end
+
     return nil
 end
 

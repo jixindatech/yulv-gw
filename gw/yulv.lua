@@ -12,6 +12,8 @@ local access_hook  = require("gw.yulv.hooks.access")
 local req_hook     = require("gw.yulv.hooks.request")
 local resp_hook    = require("gw.yulv.hooks.response")
 local errno        = require("gw.yulv.errno")
+local action_code  = require("gw.yulv.hooks.action")
+local logger       = require("gw.log")
 
 local module_name = "yulv"
 local connections = {}
@@ -37,6 +39,11 @@ function _M.stream_init_worker()
     end
 
     err = req_hook.init_worker()
+    if err ~= nil then
+        return nil, err
+    end
+
+    err = resp_hook.init_worker()
     if err ~= nil then
         return nil, err
     end
@@ -76,16 +83,24 @@ function _M.content_phase()
 
     local err = client:do_handshake(config.get_proxy_config)
     if err ~= nil then
-        ngx.log(ngx.ERR, "handshake error:" .. err)
-        return err
+        client:send_error_packet("ER_HANDSHAKE_ERROR", {err})
+        return
     end
 
     local proxy
     proxy, err = srv.get_proxy(client._proxy_conf)
     if err ~= nil then
-        return err
+        client:send_error_packet("ER_DBACCESS_DENIED_ERROR", {client._user, ngx.var.hostname, client._db or ""})
+        return
     end
     client._proxy = proxy
+    logger.log({
+        timestamp = ngx.time(),
+        ip = ip,
+        user = client._user,
+        database = client._db or "",
+        event = "access",
+    }, "access")
 
     while true do
         local context = new_context(ip, client._db)
@@ -108,15 +123,39 @@ function _M.content_phase()
 
         if pass == false then
             action = req_hook.request(context)
-            if action == "deny" then
-                return "denied"
-            elseif action == "allow" then
-                pass = true
+            if action ~= nil then
+                logger.log({
+                    id = context.rule_id,
+                    timestamp = ngx.time(),
+                    ip = ip,
+                    user = client._user,
+                    database = client._db or "",
+                    event = "sql",
+                    sqltype = context.sqltype or "",
+                    sql = context.data or "",
+                    fingerprint = context.fingerprint or "",
+                    rows = context.record_count or 0,
+                    action = action_code[action],
+                }, "rule")
+
+                if action == "deny" then
+                    client:send_error_packet("ER_UNKNOWN_ERROR", {err})
+                    goto CONTINUE
+                elseif action == "allow" then
+                    pass = true
+                end
             end
         end
 
         if proxy.is_quit_cmd(context) then
             client:send_ok_packet(nil)
+            logger.log({
+                timestamp = ngx.time(),
+                ip = ip,
+                user = client._user,
+                database = client._db or "",
+                event = "quit",
+            }, "access")
             break
         end
 
@@ -135,7 +174,29 @@ function _M.content_phase()
         end
 
         if pass == false then
-            err = resp_hook.response(context)
+            action = resp_hook.response(context)
+            if action ~= nil then
+                logger.log({
+                    id = context.rule_id,
+                    timestamp = ngx.time(),
+                    ip = ip,
+                    user = client._user,
+                    database = client._db or "",
+                    event = "sql",
+                    sqltype = context.sqltype or "",
+                    sql = context.data or "",
+                    fingerprint = context.fingerprint or "",
+                    rows = context.record_count or 0,
+                    action = action_code[action],
+                }, "rule")
+
+                if action == "deny" then
+                    client:send_error_packet("ER_UNKNOWN_ERROR", {err})
+                    goto CONTINUE
+                elseif action == "allow" then
+                    pass = true
+                end
+            end
         end
 
         local bytes
@@ -143,6 +204,18 @@ function _M.content_phase()
         if err == "timeout" then
             break
         end
+
+        logger.log({
+            timestamp = ngx.time(),
+            ip = ip,
+            user = client._user,
+            database = client._db or "",
+            event = "sql",
+            sqltype = context.type or "",
+            sql = context.data or "",
+            fingerprint = context.fingerprint or "",
+            rows = context.record_count or 0,
+        }, "access")
 
         ::CONTINUE::
     end

@@ -308,6 +308,8 @@ function _M.handle_request(self, req, context)
     local cmd = strbyte(data, 1)
     data = strsub(data, 2)
 
+    context.timestamp = ngx.time()
+
     self._packet_no = strbyte(req[1], 4, 4)
     context.cmd = cmd
     if cmd == const.cmd.COM_INIT_DB then

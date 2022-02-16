@@ -6,7 +6,7 @@ local schema = require("gw.schema")
 
 local _M = {}
 
-local module_name = "users"
+local module_name = "user"
 local module
 
 local module_schema = {
@@ -20,14 +20,17 @@ local module_schema = {
                 name = { type = "string"},
                 password = { type = "string"},
                 database = {
-                    type = "object",
-                    properties = {
-                        host = { type = "string"},
-                        port = { type = "integer"},
-                        name = { type = "string"},
-                        password = { type = "string"}
-                    },
-                    required = {"host", "port", "name", "password"},
+                    type = "array",
+                    items = {
+                        type = "object",
+                        properties = {
+                            host = { type = "string"},
+                            port = { type = "integer"},
+                            name = { type = "string"},
+                            password = { type = "string"}
+                        },
+                        required = {"host", "port", "name", "password"},
+                    }
                 }
             }
         }

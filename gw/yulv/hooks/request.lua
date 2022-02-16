@@ -9,7 +9,7 @@ local const  = require("gw.yulv.const")
 local match = require("gw.yulv.hooks.match")
 
 local _M = {}
-local module_name = "reqrules"
+local module_name = "reqrule"
 local module
 
 local module_schema = {
@@ -82,7 +82,7 @@ function _M.request(context)
     local db = context.db
     local sqltype = context.sqltype
     local data = context.data
-
+    
     if cmd == const.cmd.COM_QUERY then
         if module ~= nil and module.values ~= nil and #module.values > 0 then
             for _, item in ipairs(module.values) do
@@ -115,6 +115,7 @@ function _M.request(context)
                 end
 
                 if true then
+                    context.rule_id = rule.id
                     return  rule.matcher.action
                 end
 

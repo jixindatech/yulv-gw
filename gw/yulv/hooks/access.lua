@@ -60,18 +60,26 @@ function _M.access(ip)
     if conf_version == nil or conf_version ~= module.conf_version then
         for _, item in ipairs(module.values) do
             if item.value.type == "allow" then
-                allow_ip = iputils.parse_cidrs(item.value.data)
+                if #item.value.data > 0 then
+                    allow_ip = iputils.parse_cidrs(item.value.data)
+                else
+                    allow_ip = nil
+                end
             elseif item.value.type == "deny" then
-                deny_ip = iputils.parse_cidrs(item.value.data)
+                if #item.value.data > 0 then
+                    deny_ip = iputils.parse_cidrs(item.value.data)
+                else
+                    deny_ip = nil
+                end
             end
         end
     end
 
-    if iputils.ip_in_cidrs(ip, allow_ip) then
+    if allow_ip and iputils.ip_in_cidrs(ip, allow_ip) then
         return "allow"
     end
 
-    if iputils.ip_in_cidrs(ip, deny_ip) then
+    if deny_ip and iputils.ip_in_cidrs(ip, deny_ip) then
         return "deny"
     end
 

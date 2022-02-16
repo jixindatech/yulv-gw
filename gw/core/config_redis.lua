@@ -120,7 +120,7 @@ local function sync_data(self)
         if data_valid and self.schema then
             data_valid, err = schema.check(self.schema, item)
             if not data_valid then
-                ngx.log(ngx.ERR, "failed to check item data of [", self.key, "] err:", err, " ,val: ", json.encode(item.value))
+                ngx.log(ngx.ERR, "failed to check item data of [", self.key, "] err:", err, " ,val: ", cjson.encode(item.value))
             end
         end
 

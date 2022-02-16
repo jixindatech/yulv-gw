@@ -44,7 +44,7 @@ local _M = {
     ER_OUT_OF_RESOURCES=                              "Out of memory; check if mysqld or some other process uses all available memory; if not, you may have to use 'ulimit' to allow mysqld to use more memory or you can add more swap space",
     ER_BAD_HOST_ERROR=                                "Can't get hostname for your address",
     ER_HANDSHAKE_ERROR=                               "Bad handshake",
-    ER_DBACCESS_DENIED_ERROR=                         "Access denied for user '%-.48s'@'%-.64s' to database '%-.192s'",
+    ER_DBACCESS_DENIED_ERROR=                         "Access denied for user '%s'@'%s' to database '%s'",
     ER_ACCESS_DENIED_ERROR=                           "Access denied for user '%-.48s'@'%-.64s' (using password= %s)",
     ER_NO_DB_ERROR=                                   "No database selected",
     ER_UNKNOWN_COM_ERROR=                             "Unknown command",

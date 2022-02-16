@@ -53,7 +53,7 @@ reqrules:
         string:
           match: re
           pattern: "12"
-      action: log
+      action: 3
   -
     id: 2
     timestamp: 1
@@ -64,7 +64,7 @@ reqrules:
         string:
           match: re
           pattern: "12"
-      action: log
+      action: 3
 
 resprules:
   -
@@ -81,7 +81,7 @@ resprules:
           match: ge
           pattern: 10
 
-      action: log
+      action: 3
   -
     id: 2
     timestamp: 1
@@ -92,6 +92,6 @@ resprules:
         string:
           match: re
           pattern: "12"
-      action: log
+      action: 3
 
 #END

@@ -1,10 +1,10 @@
 redis:
-  host: 127.0.0.1
+  host: 192.168.91.1
   port: 6379
-  password: 123456
   db: 0
 
-config_type: yaml
+config_type: redis
+
 gw:
   node_listen: 9080              # listening port
   enable_heartbeat: true
@@ -52,6 +52,27 @@ nginx_config:                     # config for render the template to genarate n
   worker_rlimit_nofile: 20480     # the number of files a worker process can open, should be larger than worker_connections
   event:
     worker_connections: 10620
+
+log:
+#  rsyslog:
+#    host: 127.0.0.1
+#    port: 514
+#    type: tcp
+#    access_log: 1
+#    rule_log: 1
+#  kafka:
+#    broker:
+#      -
+#        host: 127.0.0.1
+#        port: 9092
+#      -
+#        host: 192.168.91.100
+#        port: 9092
+#    access_topic: yulv_access
+#    rule_topic: yulv_rule
+  file:
+    access_log: 1
+    rule_log: 1
 
 #etcd:
 #  host: "http://127.0.0.1:2379"   # etcd address

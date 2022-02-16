@@ -39,6 +39,14 @@ function _M.get_config_type()
     return nil
 end
 
+function _M.get_config_log()
+    if config_data then
+        return config_data.log
+    end
+
+    return nil
+end
+
 function _M.new(name, options)
     if config_data then
         if config_data.config_type == "redis" then
