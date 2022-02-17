@@ -160,14 +160,6 @@ function _M.content_phase()
 
         if srv.is_quit_cmd(context) then
             client:send_ok_packet(nil)
-            logger.log({
-                timestamp = ngx.time(),
-                transaction = transaction,
-                ip = ip,
-                user = client._user,
-                database = client._db or "",
-                event = "quit",
-            }, "access")
             break
         end
 
@@ -234,6 +226,15 @@ function _M.content_phase()
 
         ::CONTINUE::
     end
+
+    logger.log({
+        transaction = transaction,
+        timestamp = ngx.time(),
+        ip = ip,
+        user = client._user,
+        database = client._db or "",
+        event = "quit",
+    }, "access")
 
     return err
 end
