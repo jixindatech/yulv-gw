@@ -10,6 +10,10 @@
       "timestamp" : {
         "type" : "long"
       },
+      "transaction": {
+        "type": "text",
+        "fielddata": true
+      },
       "ip": {
         "type": "text",
         "fielddata": true

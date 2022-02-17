@@ -54,11 +54,11 @@ nginx_config:                     # config for render the template to genarate n
     worker_connections: 10620
 
 log:
-#  rsyslog:
-#    host: 127.0.0.1
-#    port: 514
-#    type: tcp
-#    access_log: 1
+  rsyslog:
+    host: 127.0.0.1
+    port: 514
+    type: tcp
+    access_log: 1
 #    rule_log: 1
 #  kafka:
 #    broker:

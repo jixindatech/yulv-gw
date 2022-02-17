@@ -22,6 +22,7 @@ dependencies = {
     "luautf8 = 0.1.3-1",
     "lua-resty-iputils = 0.3.0-1",
     "lua-resty-kafka = 0.09",
+    "lua-resty-jit-uuid = 0.0.7-2",
 }
 
 build = {

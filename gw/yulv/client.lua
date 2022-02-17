@@ -344,8 +344,10 @@ function _M.handle_request(self, req, context, proxy)
         return nil, nil
     elseif cmd == const.cmd.COM_SET_OPTION then
         return nil, nil
+    elseif cmd == const.cmd.COM_QUIT then
+        return nil, nil
     else
-        return nil, "ER_UNKNOWN_ERROR", strfmt("command %d not unsupported ", cmd)
+        return nil, "ER_UNKNOWN_ERROR", {strfmt("command %d not unsupported ", cmd)}
     end
 
     return nil, nil

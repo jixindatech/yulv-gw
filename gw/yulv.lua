@@ -5,6 +5,7 @@ local strsub  = string.sub
 
 local ngx = ngx
 local cjson = require("cjson.safe")
+local uuid = require("resty.jit-uuid")
 local config       = require("gw.yulv.config")
 local cli          = require("gw.yulv.client")
 local srv          = require("gw.yulv.server")
@@ -28,6 +29,8 @@ local _M = { version = "0.1"}
 _M.name = module_name
 
 function _M.stream_init_worker()
+    uuid.seed()
+
     local err = config.init_worker()
     if err ~= nil then
         return nil, err
@@ -66,6 +69,7 @@ end
 
 function _M.content_phase()
     local pass = false
+    local transaction = uuid.generate_v4()
     local ip = ngx.var.remote_addr
     local port = ngx.var.remote_port
     local action = access_hook.access(ip)
@@ -97,6 +101,7 @@ function _M.content_phase()
     client._proxy = proxy
     logger.log({
         timestamp = ngx.time(),
+        transaction = transaction,
         ip = ip,
         user = client._user,
         database = client._db or "",
@@ -113,7 +118,11 @@ function _M.content_phase()
         end
 
         ok, err, errmsg = client:handle_request(req, context, proxy)
-        if err ~= nil then
+        if err == "timeout" then
+            return
+        end
+
+        if err ~= nil and errmsg ~= nil then
             client:send_error_packet(err, errmsg)
             goto CONTINUE
         end
@@ -126,6 +135,7 @@ function _M.content_phase()
             action = req_hook.request(context)
             if action ~= nil then
                 logger.log({
+                    transaction = transaction,
                     id = context.rule_id,
                     timestamp = ngx.time(),
                     ip = ip,
@@ -152,6 +162,7 @@ function _M.content_phase()
             client:send_ok_packet(nil)
             logger.log({
                 timestamp = ngx.time(),
+                transaction = transaction,
                 ip = ip,
                 user = client._user,
                 database = client._db or "",
@@ -170,6 +181,7 @@ function _M.content_phase()
         if err == "timeout" then
             break
         end
+
         if err ~= nil then
             ngx.log(ngx.ERR, "err:" .. err)
         end
@@ -178,6 +190,7 @@ function _M.content_phase()
             action = resp_hook.response(context)
             if action ~= nil then
                 logger.log({
+                    transaction = transaction,
                     id = context.rule_id,
                     timestamp = ngx.time(),
                     ip = ip,
@@ -207,6 +220,7 @@ function _M.content_phase()
         end
 
         logger.log({
+            transaction = transaction,
             timestamp = ngx.time(),
             ip = ip,
             user = client._user,
