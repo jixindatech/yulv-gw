@@ -1573,20 +1573,39 @@ function _M.cmd_filed_list(self, typ)
     end
 end
 
-function _M.get_proxy(conf)
-    local proxy = new()
+function _M.get_proxy(conf, db)
+    if #conf.database ==0 then
+        return nil, "database is empty"
+    end
 
-    local options = {
-        host = conf.database.host,
-        port = conf.database.port,
-        user = conf.database.user,
-        password = conf.database.password,
-        database = conf.database.name,
-        charset = "utf8"
+    local proxy = {
+        default = conf.database[1].name,
+        database = {}
     }
-    local _, err = proxy:connect(options)
-    if err ~= nil then
-        return nil, err
+    for _, item in ipairs(conf.database) do
+        local _proxy = new()
+        local options = {
+            host = item.host,
+            port = item.port,
+            user = item.user,
+            password = item.password,
+            database = item.name,
+            charset = "utf8"
+        }
+        local _, err = _proxy:connect(options)
+        if err ~= nil then
+            return nil, err
+        end
+
+        proxy.database[item.name] = _proxy
+    end
+
+    if db ~= nil and db ~= "" then
+        if proxy.database[db] ~= nil then
+            proxy.default = db
+        else
+            return nil, "db is denied for database configuration"
+        end
     end
 
     return proxy

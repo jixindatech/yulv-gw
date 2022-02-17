@@ -4,7 +4,7 @@ local strbyte = string.byte
 local strsub  = string.sub
 
 local ngx = ngx
-
+local cjson = require("cjson.safe")
 local config       = require("gw.yulv.config")
 local cli          = require("gw.yulv.client")
 local srv          = require("gw.yulv.server")
@@ -87,8 +87,9 @@ function _M.content_phase()
         return
     end
 
+    local errmsg
     local proxy
-    proxy, err = srv.get_proxy(client._proxy_conf)
+    proxy, err = srv.get_proxy(client._proxy_conf, client._db)
     if err ~= nil then
         client:send_error_packet("ER_DBACCESS_DENIED_ERROR", {client._user, ngx.var.hostname, client._db or ""})
         return
@@ -111,9 +112,9 @@ function _M.content_phase()
             break
         end
 
-        ok, err = client:handle_request(req, context)
+        ok, err, errmsg = client:handle_request(req, context, proxy)
         if err ~= nil then
-            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
+            client:send_error_packet(err, errmsg)
             goto CONTINUE
         end
 
@@ -147,7 +148,7 @@ function _M.content_phase()
             end
         end
 
-        if proxy.is_quit_cmd(context) then
+        if srv.is_quit_cmd(context) then
             client:send_ok_packet(nil)
             logger.log({
                 timestamp = ngx.time(),
@@ -159,13 +160,13 @@ function _M.content_phase()
             break
         end
 
-        err = proxy:send_request(req)
+        err = proxy.database[proxy.default]:send_request(req)
         if err == "timeout" then
             break
         end
 
         local resp
-        resp, err = proxy:get_response(context)
+        resp, err = proxy.database[proxy.default]:get_response(context)
         if err == "timeout" then
             break
         end

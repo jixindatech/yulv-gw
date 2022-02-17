@@ -303,7 +303,7 @@ local function get_sql_type(sql)
     return nil
 end
 
-function _M.handle_request(self, req, context)
+function _M.handle_request(self, req, context, proxy)
     local data = req[2]
     local cmd = strbyte(data, 1)
     data = strsub(data, 2)
@@ -313,6 +313,11 @@ function _M.handle_request(self, req, context)
     self._packet_no = strbyte(req[1], 4, 4)
     context.cmd = cmd
     if cmd == const.cmd.COM_INIT_DB then
+        if proxy.database[data] == nil then
+            return nil, "ER_DBACCESS_DENIED_ERROR", {self._user, ngx.var.hostname, data}
+        end
+        proxy.default = data
+
         self._db = data
         context.db = data
     elseif cmd == const.cmd.COM_PING then
@@ -340,7 +345,7 @@ function _M.handle_request(self, req, context)
     elseif cmd == const.cmd.COM_SET_OPTION then
         return nil, nil
     else
-        return nil, strfmt("command %d not unsupported ", cmd)
+        return nil, "ER_UNKNOWN_ERROR", strfmt("command %d not unsupported ", cmd)
     end
 
     return nil, nil

@@ -3,7 +3,7 @@ users:
     id: 1
     timestamp: 1
     config:
-      name: test
+      user: test
       password: test
       database:
         name: "waf"
@@ -15,7 +15,7 @@ users:
     id: 2
     timestamp: 1
     config:
-      name: test1
+      user: test1
       password: test1
       database:
         name: "sqlaudit"

@@ -59,7 +59,7 @@ function _M.get_proxy_config(user)
     if module ~= nil and module.values ~= nil and #module.values > 0 then
         for _, v in ipairs(module.values) do
             local conf = v.value
-            if conf.name == user then
+            if conf.user == user then
                 return conf
             end
         end
