@@ -382,14 +382,10 @@ local function _recv_response_packet(self)
 
     local header, err = sock:receive(4) -- packet header
     if not header then
-        return nil, nil, "failed to receive packet header: " .. err
+        return nil, nil, err
     end
 
-    --print("packet header: ", _dump(data))
-
     local len, pos = utils.get_byte3(header, 1)
-
-    --print("packet length: ", len)
 
     if len == 0 then
         return nil, nil, "empty packet"
@@ -401,14 +397,10 @@ local function _recv_response_packet(self)
 
     local num = strbyte(header, pos)
 
-    --print("recv packet: packet no: ", num)
-
     self.packet_no = num
 
     local data
     data, err = sock:receive(len)
-
-    --print("receive returned")
 
     if not data then
         return nil, nil, "failed to read packet content: " .. err
@@ -1109,7 +1101,7 @@ function _M.set_timeout(self, timeout)
 end
 
 
-local function new(self)
+function _M.new(self)
     local sock, err = tcp()
     if not sock then
         return nil, err
@@ -1178,7 +1170,7 @@ function _M.connect(self, opts)
     end
 
     if not ok then
-        return nil, 'failed to connect: ' .. err
+        return nil, err
     end
 
     local reused = sock:getreusedtimes()
@@ -1453,7 +1445,7 @@ function _M.get_response(self, context)
         end
     elseif cmd == const.cmd.COM_QUERY then
         resp, typ, err = _recv_response_packet(self)
-        if typ == RESP_ERR then
+        if typ == RESP_ERR or typ == RESP_OK then
             return resp
         end
 
@@ -1582,8 +1574,8 @@ function _M.get_proxy(conf, db)
         default = conf.database[1].name,
         database = {}
     }
+
     for _, item in ipairs(conf.database) do
-        local _proxy = new()
         local options = {
             host = item.host,
             port = item.port,
@@ -1592,12 +1584,7 @@ function _M.get_proxy(conf, db)
             database = item.name,
             charset = "utf8"
         }
-        local _, err = _proxy:connect(options)
-        if err ~= nil then
-            return nil, err
-        end
-
-        proxy.database[item.name] = _proxy
+        proxy.database[item.name] = options
     end
 
     if db ~= nil and db ~= "" then

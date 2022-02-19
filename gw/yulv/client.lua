@@ -6,6 +6,7 @@ local strrep = string.rep
 local strbyte = string.byte
 local strlen = string.len
 local strfmt = string.format
+local strlower = string.lower
 
 local bit = bit
 local lshift = bit.lshift
@@ -18,6 +19,7 @@ local math = math
 local tabconcat = table.concat
 local tabunpack = table.unpack
 
+local cjson = require("cjson.safe")
 local utils = require("gw.utils.util")
 local const = require("gw.yulv.const")
 local fingerprint = require("gw.yulv.hooks.fingerprint")
@@ -285,13 +287,19 @@ local function  is_sql_sep(r)
             r == '\n' or r == '\r'
 end
 
-local function get_sql_type(sql)
+local function get_sql_tokens(sql)
+    local tokens = {}
+    local index = 1
+
     local start = -1
     for i=1,strlen(sql) do
         local chr = strsub(sql, i, i)
         if is_sql_sep(chr) then
             if start ~= -1 then
-                return strsub(sql, start, i - 1)
+                tokens[index] = strlower(strsub(sql, start, i - 1))
+                index = index+1
+
+                start = -1
             end
         else
             if start == -1 then
@@ -300,7 +308,11 @@ local function get_sql_type(sql)
         end
     end
 
-    return nil
+    if start >= 0 then
+        tokens[index] = strlower(strsub(sql, start, #sql))
+    end
+
+    return tokens
 end
 
 function _M.handle_request(self, req, context, proxy)
@@ -329,7 +341,15 @@ function _M.handle_request(self, req, context, proxy)
     elseif cmd == const.cmd.COM_QUERY then
         context.data = data
         context.fingerprint = fingerprint.parse(data)
-        context.sqltype = get_sql_type(data)
+        local tokens = get_sql_tokens(data)
+        context.sqltype = tokens[1]
+        if context.sqltype == "use" then
+            local db = tokens[2]
+            if proxy.database[db] == nil then
+                return nil, "ER_DBACCESS_DENIED_ERROR", {self._user, ngx.var.hostname, db}
+            end
+            proxy.default = db
+        end
     elseif cmd == const.cmd.COM_FIELD_LIST then
         return nil, nil
     elseif cmd == const.cmd.COM_STMT_PREPARE then

@@ -114,11 +114,13 @@ function _M.content_phase()
         local req
         req, err = client:get_request()
         if err == "timeout" then
+            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
             break
         end
 
         ok, err, errmsg = client:handle_request(req, context, proxy)
         if err == "timeout" then
+            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
             return
         end
 
@@ -163,20 +165,32 @@ function _M.content_phase()
             break
         end
 
-        err = proxy.database[proxy.default]:send_request(req)
+        local server = srv:new()
+        srv:set_timeout(100000000)
+        ok, err = server:connect(proxy.database[proxy.default])
         if err == "timeout" then
+            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
+            break
+        end
+
+        err = server:send_request(req)
+        if err == "timeout" then
+            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
             break
         end
 
         local resp
-        resp, err = proxy.database[proxy.default]:get_response(context)
+        resp, err = server:get_response(context)
         if err == "timeout" then
+            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
             break
         end
 
         if err ~= nil then
             ngx.log(ngx.ERR, "err:" .. err)
         end
+
+        server:set_keepalive()
 
         if pass == false then
             action = resp_hook.response(context)
@@ -208,6 +222,7 @@ function _M.content_phase()
         local bytes
         bytes, err = client:send_response(resp)
         if err == "timeout" then
+            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
             break
         end
 
@@ -227,13 +242,17 @@ function _M.content_phase()
         ::CONTINUE::
     end
 
+    local event = "quit"
+    if err == "timeout" then
+        event = "timeout"
+    end
     logger.log({
         transaction = transaction,
         timestamp = ngx.time(),
         ip = ip,
         user = client._user,
         database = client._db or "",
-        event = "quit",
+        event = event,
     }, "access")
 
     return err
@@ -244,9 +263,6 @@ function _M.log_phase()
     local key = ngx.var.remote_addr .. ":" ..ngx.var.remote_port
     local client = connections[key]
 
-    if client.proxy ~= nil then
-        client.proxy:set_keepalive()
-    end
 
     connections[key] = nil
 end

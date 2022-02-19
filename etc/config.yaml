@@ -29,7 +29,7 @@ gw:
   # port_admin: 9180              # use a separate port
   stream_proxy:                 # TCP/UDP proxy
      tcp:                        # TCP proxy port list
-       - 3306
+       - "192.168.91.100:3306"
      #udp:                        # UDP proxy port list
      #  - 9200
      #  - 9211
