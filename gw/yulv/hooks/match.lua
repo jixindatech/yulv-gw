@@ -2,7 +2,7 @@ local ngx = ngx
 
 local _M = {}
 
-function _M.find(str, pattern)
+function _M.str_find(str, pattern)
     return  ngx.re.find(str, pattern, "jo")
 end
 

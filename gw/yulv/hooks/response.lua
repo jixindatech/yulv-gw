@@ -91,13 +91,13 @@ function _M.response(context)
                 end
 
                 local rows = context.record_count
-                if rule.matcher.rows > 0 and rule.matcher.rows < rows then
+                if rule.matcher.rows > 0 and rule.matcher.rows > rows then
                     goto CONTINUE
                 end
 
                 if true then
                     context.rule_id = rule.id
-                    return  rule.matcher.action
+                    return  rule.action
                 end
 
                 ::CONTINUE::
