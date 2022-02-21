@@ -33,7 +33,7 @@
         "type": "text",
         "fielddata": true
       },
-      "type": {
+      "sqltype": {
         "type": "text",
         "fielddata": true
       },

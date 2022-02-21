@@ -117,6 +117,14 @@ stream {
         proxy_protocol on;
         {% end %}
 
+        {% if stream_proxy and stream_proxy.keepalive_timeout then %}
+        lua_socket_keepalive_timeout {*stream_proxy.keepalive_timeout*};
+        {% end %}
+
+        {% if stream_proxy and stream_proxy.read_timeout then %}
+        lua_socket_read_timeout {*stream_proxy.read_timeout*};
+        {% end %}
+
         content_by_lua_block {
             gw.stream_content_phase()
         }

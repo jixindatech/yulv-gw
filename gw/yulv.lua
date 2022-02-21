@@ -104,8 +104,8 @@ function _M.content_phase()
         transaction = transaction,
         ip = ip,
         user = client._user,
-        database = client._db or "",
-        event = "access",
+        database = proxy.default,
+        event = "login",
     }, "access")
 
     while true do
@@ -142,7 +142,7 @@ function _M.content_phase()
                     timestamp = ngx.time(),
                     ip = ip,
                     user = client._user,
-                    database = client._db or "",
+                    database = proxy.default,
                     event = "rule",
                     sqltype = context.sqltype or "",
                     sql = context.data or "",
@@ -166,7 +166,6 @@ function _M.content_phase()
         end
 
         local server = srv:new()
-        srv:set_timeout(100000000)
         ok, err = server:connect(proxy.database[proxy.default])
         if err == "timeout" then
             client:send_error_packet("ER_UNKNOWN_ERROR", {err})
@@ -201,7 +200,7 @@ function _M.content_phase()
                     timestamp = ngx.time(),
                     ip = ip,
                     user = client._user,
-                    database = client._db or "",
+                    database = proxy.default,
                     event = "rule",
                     sqltype = context.sqltype or "",
                     sql = context.data or "",
@@ -231,9 +230,9 @@ function _M.content_phase()
             timestamp = ngx.time(),
             ip = ip,
             user = client._user,
-            database = client._db or "",
+            database = proxy.default,
             event = "sql",
-            sqltype = context.type or "",
+            sqltype = context.sqltype or "",
             sql = context.data or "",
             fingerprint = context.fingerprint or "",
             rows = context.record_count or 0,
@@ -251,7 +250,7 @@ function _M.content_phase()
         timestamp = ngx.time(),
         ip = ip,
         user = client._user,
-        database = client._db or "",
+        database = proxy.default,
         event = event,
     }, "access")
 

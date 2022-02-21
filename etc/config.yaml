@@ -33,6 +33,9 @@ gw:
      #udp:                        # UDP proxy port list
      #  - 9200
      #  - 9211
+     keepalive_timeout: 7200 #sql server keepalive timeout
+     read_timeout: 7200
+
   dns_resolver:                   # default DNS resolver, with disable IPv6 and enable local DNS
     - 114.114.114.114
     - 223.5.5.5

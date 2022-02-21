@@ -331,7 +331,6 @@ function _M.handle_request(self, req, context, proxy)
         proxy.default = data
 
         self._db = data
-        context.db = data
     elseif cmd == const.cmd.COM_PING then
         local err = _M.send_ok_packet(nil)
         if err ~= nil then
