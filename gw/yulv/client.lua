@@ -321,7 +321,6 @@ function _M.handle_request(self, req, context, proxy)
     data = strsub(data, 2)
 
     context.timestamp = ngx.time()
-
     self._packet_no = strbyte(req[1], 4, 4)
     context.cmd = cmd
     if cmd == const.cmd.COM_INIT_DB then
@@ -332,7 +331,7 @@ function _M.handle_request(self, req, context, proxy)
 
         self._db = data
     elseif cmd == const.cmd.COM_PING then
-        local err = _M.send_ok_packet(nil)
+        local err = _M.send_ok_packet(self, nil)
         if err ~= nil then
             return nil, err
         end

@@ -118,6 +118,10 @@ function _M.content_phase()
             break
         end
 
+        if err == "connection reset by peer" then
+            break
+        end
+
         ok, err, errmsg = client:handle_request(req, context, proxy)
         if err == "timeout" then
             client:send_error_packet("ER_UNKNOWN_ERROR", {err})
@@ -242,9 +246,6 @@ function _M.content_phase()
     end
 
     local event = "quit"
-    if err == "timeout" then
-        event = "timeout"
-    end
     logger.log({
         transaction = transaction,
         timestamp = ngx.time(),

@@ -7,6 +7,8 @@ local strbyte = string.byte
 local strchar = string.char
 local format = string.format
 local strrep = string.rep
+local strsub = string.sub
+
 local null = ngx.null
 local band = bit.band
 local bxor = bit.bxor
@@ -1513,16 +1515,123 @@ function _M.get_response(self, context)
             return resp
         end
 
-        res = resp
+        local index = #res
+        res[index+1] = resp[1]
+        res[index+2] = resp[2]
+
+        local pos = 1
+        local statement_id, num_columns, num_params
+        local header = strsub(resp[2], 2)
+        statement_id, pos = utils.get_byte4(header, pos)
+        num_columns, pos = utils.get_byte2(header, pos)
+        num_params, pos = utils.get_byte2(header, pos)
+        if num_params > 0 then
+            for i = 1, num_params do
+                resp, typ, err = _recv_response_packet(self)
+                if not resp then
+                    return nil, err
+                end
+
+                index = #res
+                res[index+1] = resp[1]
+                res[index+2] = resp[2]
+            end
+
+            resp, typ, err = _recv_response_packet(self)
+            if err then
+                return nil, err
+            end
+
+            index = #res
+            res[index+1] = resp[1]
+            res[index+2] = resp[2]
+
+            if typ ~= RESP_EOF then
+                return nil, "invalid data"
+            end
+        end
+
+        if num_columns > 0 then
+            for i = 1, num_columns do
+                resp, typ, err = _recv_response_packet(self)
+                if not resp then
+                    return nil, err
+                end
+
+                index = #res
+                res[index+1] = resp[1]
+                res[index+2] = resp[2]
+            end
+
+            resp, typ, err = _recv_response_packet(self)
+            if err then
+                return nil, err
+            end
+
+            index = #res
+            res[index+1] = resp[1]
+            res[index+2] = resp[2]
+
+            if typ ~= RESP_EOF then
+                return nil, "invalid data"
+            end
+        end
+
+        return res, nil
     elseif cmd == const.cmd.COM_STMT_SEND_LONG_DATA then
         -- no response
     elseif cmd == const.cmd.COM_STMT_EXECUTE then
         resp, typ, err = _recv_response_packet(self)
-        if typ == RESP_ERR then
+        if typ == RESP_ERR or typ == RESP_OK then
             return resp
         end
 
+        local field_count, extra = _parse_result_set_header_packet(resp[2])
         res = resp
+        for i = 1, field_count do
+            resp, typ, err = _recv_response_packet(self)
+            if not resp then
+                return nil, err
+            end
+
+            local index = #res
+            res[index+1] = resp[1]
+            res[index+2] = resp[2]
+        end
+
+        context.filed_count = field_count
+
+        resp, typ, err = _recv_response_packet(self)
+        if err then
+            return nil, err
+        end
+
+        local index = #res
+        res[index+1] = resp[1]
+        res[index+2] = resp[2]
+
+        if typ ~= RESP_EOF then
+            return nil, "invalid data"
+        end
+
+        while true do
+            resp, typ, err = _recv_response_packet(self)
+            if not resp then
+                return nil, err
+            end
+
+            index = #res
+            res[index+1] = resp[1]
+            res[index+2] = resp[2]
+
+            context.record_count = context.record_count + 1
+
+            if typ == RESP_EOF then
+                break
+            end
+        end
+
+        return res, nil
     elseif cmd == const.cmd.COM_STMT_CLOSE then
         -- no response
     elseif cmd == const.cmd.COM_STMT_RESET then
