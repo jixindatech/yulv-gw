@@ -144,6 +144,7 @@ function _M.content_phase()
                     transaction = transaction,
                     id = context.rule_id,
                     timestamp = ngx.time(),
+                    cmd = context.cmd,
                     ip = ip,
                     user = client._user,
                     database = proxy.default,
@@ -200,6 +201,7 @@ function _M.content_phase()
             if action ~= nil then
                 logger.log({
                     transaction = transaction,
+                    cmd = context.cmd,
                     id = context.rule_id,
                     timestamp = ngx.time(),
                     ip = ip,
@@ -235,6 +237,7 @@ function _M.content_phase()
             ip = ip,
             user = client._user,
             database = proxy.default,
+            cmd = context.cmd,
             event = "sql",
             sqltype = context.sqltype or "",
             sql = context.data or "",

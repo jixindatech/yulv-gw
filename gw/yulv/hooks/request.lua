@@ -83,7 +83,7 @@ function _M.request(context)
     local sqltype = context.sqltype
     local data = context.data
     
-    if cmd == const.cmd.COM_QUERY then
+    if cmd == const.cmd.COM_QUERY or cmd == const.cmd.COM_STMT_PREPARE then
         if module ~= nil and module.values ~= nil and #module.values > 0 then
             for _, item in ipairs(module.values) do
                 local rule = item.value

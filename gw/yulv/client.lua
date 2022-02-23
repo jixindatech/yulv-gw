@@ -337,6 +337,7 @@ function _M.handle_request(self, req, context, proxy)
         end
         return true, nil
     elseif cmd == const.cmd.COM_QUERY then
+        ngx.log(ngx.ERR, "query:" .. data)
         context.data = data
         context.fingerprint = fingerprint.parse(data)
         local tokens = get_sql_tokens(data)
@@ -351,6 +352,10 @@ function _M.handle_request(self, req, context, proxy)
     elseif cmd == const.cmd.COM_FIELD_LIST then
         return nil, nil
     elseif cmd == const.cmd.COM_STMT_PREPARE then
+        context.data = data
+        context.fingerprint = fingerprint.parse(data)
+        local tokens = get_sql_tokens(data)
+        context.sqltype = tokens[1]
         return nil, nil
     elseif cmd == const.cmd.COM_STMT_EXECUTE then
         return nil, nil

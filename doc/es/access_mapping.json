@@ -11,36 +11,31 @@
         "type" : "long"
       },
       "transaction": {
-        "type": "text",
-        "fielddata": true
+        "type": "keyword"
       },
       "ip": {
-        "type": "text",
-        "fielddata": true
+        "type": "keyword"
       },
       "user": {
-        "type": "text",
-        "fielddata": true
+        "type": "keyword"
       },
       "database": {
-        "type": "text",
-        "fielddata": true
+        "type": "keyword"
+      },
+      "cmd": {
+        "type": "long"
       },
       "event": {
-        "type": "text",
-        "fielddata": true
+        "type": "keyword"
       },
       "sqltype": {
-        "type": "text",
-        "fielddata": true
+        "type": "keyword"
       },
       "sql": {
-        "type": "text",
-        "fielddata": true
+        "type": "keyword"
       },
       "fingerprint": {
-        "type": "text",
-        "fielddata": true
+        "type": "keyword"
       },
       "rows": {
         "type" : "long"
