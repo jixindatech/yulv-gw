@@ -1515,6 +1515,10 @@ function _M.get_response(self, context)
             return resp
         end
 
+        if err ~= nil then
+            return nil, err
+        end
+
         local index = #res
         res[index+1] = resp[1]
         res[index+2] = resp[2]

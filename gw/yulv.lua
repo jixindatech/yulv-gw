@@ -108,6 +108,14 @@ function _M.content_phase()
         event = "login",
     }, "access")
 
+    local server = srv:new()
+    local server_name = proxy.default
+    ok, err = server:connect(proxy.database[server_name])
+    if err ~= nil then
+        client:send_error_packet("ER_UNKNOWN_ERROR", {err})
+        return
+    end
+
     while true do
         local context = new_context(ip, client._db)
 
@@ -170,11 +178,18 @@ function _M.content_phase()
             break
         end
 
-        local server = srv:new()
-        ok, err = server:connect(proxy.database[proxy.default])
-        if err == "timeout" then
-            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
-            break
+        if proxy.default ~= server_name then
+            ngx.log(ngx.ERR, "server_name:" .. server_name)
+            --TODO: fix keepalive for connection pool !!!
+            -- server:set_keepalive()
+
+            server = srv:new()
+            server_name = proxy.default
+            ok, err = server:connect(proxy.database[server_name])
+            if err ~= nil then
+                client:send_error_packet("ER_UNKNOWN_ERROR", {err})
+                break
+            end
         end
 
         err = server:send_request(req)
@@ -193,8 +208,6 @@ function _M.content_phase()
         if err ~= nil then
             ngx.log(ngx.ERR, "err:" .. err)
         end
-
-        server:set_keepalive()
 
         if pass == false then
             action = resp_hook.response(context)

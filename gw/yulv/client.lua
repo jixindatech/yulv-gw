@@ -60,6 +60,7 @@ function _M.get_request(self)
     if err then
         return nil, err
     end
+
     local len, pos = utils.get_byte3(header, 1)
 
     if len == 0 then
