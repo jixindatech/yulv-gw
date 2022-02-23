@@ -174,7 +174,7 @@ local function process_client_handshake(self, find_user)
 
     local authlen = strbyte(data, pos)
     pos = pos + 1
-    local auth = strsub(data, pos, authlen+pos)
+    local auth = strsub(data, pos, authlen+pos-1)
     local user_conf = find_user(user)
     if user_conf == nil then
         return "invalid user"
@@ -182,9 +182,9 @@ local function process_client_handshake(self, find_user)
     self._proxy_conf = user_conf
 
     local password = user_conf.password
-    local check_auth = utils.compute_token(self._salt, password, LEN_NATIVE_SCRAMBLE)
+    local check_auth = utils.compute_token(password, self._salt, LEN_NATIVE_SCRAMBLE)
     if check_auth ~= auth then
-        return nil
+        return "invalid password"
     end
 
     pos = pos + authlen
