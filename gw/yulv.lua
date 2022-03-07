@@ -7,17 +7,15 @@ local ngx = ngx
 local cjson = require("cjson.safe")
 local uuid = require("resty.jit-uuid")
 local config       = require("gw.yulv.config")
-local cli          = require("gw.yulv.client")
-local srv          = require("gw.yulv.server")
+local cli          = require("gw.yulv.conn.client")
 local access_hook  = require("gw.yulv.hooks.access")
 local req_hook     = require("gw.yulv.hooks.request")
 local resp_hook    = require("gw.yulv.hooks.response")
-local errno        = require("gw.yulv.errno")
 local action_code  = require("gw.yulv.hooks.action")
+local io = require("gw.yulv.mysql.io")
 local logger       = require("gw.log")
 
 local module_name = "yulv"
-local connections = {}
 
 local ok, new_tab = pcall(require, "table.new")
 if not ok then
@@ -54,10 +52,10 @@ function _M.stream_init_worker()
     return true, nil
 end
 
-local function new_context(ip, db)
+local function new_context(ip)
     local context = new_tab(10, 0)
     context.client = ip
-    context.db = db
+    context.db = nil
     context.cmd = 0
     context.filed_count = 0
     context.record_count = 0
@@ -71,7 +69,7 @@ function _M.content_phase()
     local pass = false
     local transaction = uuid.generate_v4()
     local ip = ngx.var.remote_addr
-    local port = ngx.var.remote_port
+    --local port = ngx.var.remote_port
     local action = access_hook.access(ip)
     if action == "allow" then
         pass = true
@@ -79,72 +77,40 @@ function _M.content_phase()
         return "deny"
     end
 
-    local client = cli.new({
-        sock = ngx.req.socket()
+    local client, err = cli.new({
+        sock = ngx.req.socket(),
+        users = config.get_users(),
     })
-    local key = ip.. ":" .. port
-    connections[key] = client
-
-    local err = client:do_handshake(config.get_proxy_config)
     if err ~= nil then
-        client:send_error_packet("ER_HANDSHAKE_ERROR", {err})
+        io.send_error_packet(client,"ER_HANDSHAKE_ERROR", {err})
         return
     end
 
-    local errmsg
-    local proxy
-    proxy, err = srv.get_proxy(client._proxy_conf, client._db)
+    err = client:do_handshake()
     if err ~= nil then
-        client:send_error_packet("ER_DBACCESS_DENIED_ERROR", {client._user, ngx.var.hostname, client._db or ""})
+        io.send_error_packet(client,"ER_HANDSHAKE_ERROR", {err})
         return
     end
-    client._proxy = proxy
+
     logger.log({
         timestamp = ngx.time(),
         transaction = transaction,
         ip = ip,
         user = client._user,
-        database = proxy.default,
+        database = client._db or "",
         event = "login",
     }, "access")
 
-    local server = srv:new()
-    local server_name = proxy.default
-    ok, err = server:connect(proxy.database[server_name])
-    if err ~= nil then
-        client:send_error_packet("ER_UNKNOWN_ERROR", {err})
-        return
-    end
-
+    local data, err_msg
     while true do
-        local context = new_context(ip, client._db)
-
-        local req
-        req, err = client:get_request()
-        if err == "timeout" then
-            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
+        local context = new_context(ip)
+        data, err = io.read_packet(client)
+        if err ~= nil then
+            --"timeout, connection reset by peer, closed"
             break
         end
 
-        if err == "connection reset by peer" then
-            break
-        end
-
-        ok, err, errmsg = client:handle_request(req, context, proxy)
-        if err == "timeout" then
-            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
-            return
-        end
-
-        if err ~= nil and errmsg ~= nil then
-            client:send_error_packet(err, errmsg)
-            goto CONTINUE
-        end
-
-        if ok then
-            goto CONTINUE
-        end
-
+        --[[
         if pass == false then
             action = req_hook.request(context)
             if action ~= nil then
@@ -172,7 +138,28 @@ function _M.content_phase()
                 end
             end
         end
+        ]]--
 
+        context. timestamp = ngx.time()
+        err, err_msg = client:dispatch(data, context)
+        if err ~= nil then
+            if type(err) == "string" then
+                ngx.log(ngx.ERR, "yulv error:" .. err)
+                err = io.send_error_packet(client, "ER_UNKNOWN_ERROR", {"ER_UNKNOWN_ERROR"})
+            else
+                err = io.send_error(client, err)
+            end
+
+            if err == "timeout" or err == "connection reset by peer" or err == "closed" then
+                break
+            end
+        end
+
+        if client:is_closed() then
+            break
+        end
+
+        --[[
         if srv.is_quit_cmd(context) then
             client:send_ok_packet(nil)
             break
@@ -257,6 +244,7 @@ function _M.content_phase()
             fingerprint = context.fingerprint or "",
             rows = context.record_count or 0,
         }, "access")
+        --]]
 
         ::CONTINUE::
     end
@@ -267,7 +255,7 @@ function _M.content_phase()
         timestamp = ngx.time(),
         ip = ip,
         user = client._user,
-        database = proxy.default,
+        database = client._db or "",
         event = event,
     }, "access")
 
@@ -276,11 +264,7 @@ end
 
 
 function _M.log_phase()
-    local key = ngx.var.remote_addr .. ":" ..ngx.var.remote_port
-    local client = connections[key]
 
-
-    connections[key] = nil
 end
 
 return _M

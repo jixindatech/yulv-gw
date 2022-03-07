@@ -8,6 +8,7 @@ local _M = {}
 
 local module_name = "user"
 local module
+local users = {}
 
 local module_schema = {
     type = "object",
@@ -38,12 +39,21 @@ local module_schema = {
     required = {"id", "timestamp", "config"},
 }
 
+local function set_users(values)
+    users = {}
+    for _, v in ipairs(values) do
+        local conf = v.value
+        users[conf.user] = conf
+    end
+end
+
 function _M.init_worker()
     local options = {
         key = module_name,
         schema = module_schema,
         automatic = true,
         interval = 10,
+        post_func = set_users,
     }
 
     local err
@@ -66,6 +76,14 @@ function _M.get_proxy_config(user)
     end
 
     return nil
+end
+
+function _M.get_user(name)
+    return users[name]
+end
+
+function _M.get_users()
+    return users
 end
 
 return _M

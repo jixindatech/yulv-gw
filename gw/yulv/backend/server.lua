@@ -5,7 +5,7 @@ local sub = string.sub
 local tcp = ngx.socket.tcp
 local strbyte = string.byte
 local strchar = string.char
-local format = string.format
+local strfmt = string.format
 local strrep = string.rep
 local strsub = string.sub
 
@@ -27,7 +27,10 @@ local to_int = math.floor
 local has_rsa, resty_rsa = pcall(require, "resty.rsa")
 
 local utils = require("gw.utils.util")
-local const = require("gw.yulv.const")
+local const = require("gw.yulv.mysql.const")
+local io = require("gw.yulv.mysql.io")
+local charset = require("gw.yulv.mysql.charset")
+local field = require("gw.yulv.mysql.field")
 
 if not ngx.config then
     error("ngx_lua 0.9.11+ or ngx_stream_lua required")
@@ -89,57 +92,9 @@ local LEN_OLD_SCRAMBLE = 8
 -- 16MB - 1, the default max allowed packet size used by libmysqlclient
 local FULL_PACKET_SIZE = 16777215
 
--- the following charset map is generated from the following mysql query:
---   SELECT CHARACTER_SET_NAME, ID
---   FROM information_schema.collations
---   WHERE IS_DEFAULT = 'Yes' ORDER BY id;
-local CHARSET_MAP = {
-    _default  = 0,
-    big5      = 1,
-    dec8      = 3,
-    cp850     = 4,
-    hp8       = 6,
-    koi8r     = 7,
-    latin1    = 8,
-    latin2    = 9,
-    swe7      = 10,
-    ascii     = 11,
-    ujis      = 12,
-    sjis      = 13,
-    hebrew    = 16,
-    tis620    = 18,
-    euckr     = 19,
-    koi8u     = 22,
-    gb2312    = 24,
-    greek     = 25,
-    cp1250    = 26,
-    gbk       = 28,
-    latin5    = 30,
-    armscii8  = 32,
-    utf8      = 33,
-    ucs2      = 35,
-    cp866     = 36,
-    keybcs2   = 37,
-    macce     = 38,
-    macroman  = 39,
-    cp852     = 40,
-    latin7    = 41,
-    utf8mb4   = 45,
-    cp1251    = 51,
-    utf16     = 54,
-    utf16le   = 56,
-    cp1256    = 57,
-    cp1257    = 59,
-    utf32     = 60,
-    binary    = 63,
-    geostd8   = 92,
-    cp932     = 95,
-    eucjpms   = 97,
-    gb18030   = 248
-}
-
 local mt = { __index = _M }
 
+local default_capability = const.DEFAULT_CAPABILITY
 
 -- mysql field value type converters
 local converters = new_tab(0, 9)
@@ -303,13 +258,13 @@ end
 
 
 local function _send_packet(self, req, size)
-    local sock = self.sock
+    local sock = self._sock
 
-    self.packet_no = self.packet_no + 1
+    self._packet_no = self._packet_no + 1
 
-    -- print("packet no: ", self.packet_no)
+    -- print("packet no: ", self._packet_no)
 
-    local packet = utils.set_byte3(size) .. strchar(band(self.packet_no, 255)) .. req
+    local packet = utils.set_byte3(size) .. strchar(band(self._packet_no, 255)) .. req
 
     -- print("sending packet: ", _dump(packet))
 
@@ -320,7 +275,7 @@ end
 
 
 local function _recv_packet(self)
-    local sock = self.sock
+    local sock = self._sock
 
     local data, err = sock:receive(4) -- packet header
     if not data then
@@ -345,7 +300,7 @@ local function _recv_packet(self)
 
     --print("recv packet: packet no: ", num)
 
-    self.packet_no = num
+    self._packet_no = num
 
     data, err = sock:receive(len)
 
@@ -380,7 +335,7 @@ end
 
 
 local function _recv_response_packet(self)
-    local sock = self.sock
+    local sock = self._sock
 
     local header, err = sock:receive(4) -- packet header
     if not header then
@@ -399,7 +354,7 @@ local function _recv_response_packet(self)
 
     local num = strbyte(header, pos)
 
-    self.packet_no = num
+    self._packet_no = num
 
     local data
     data, err = sock:receive(len)
@@ -700,7 +655,7 @@ local function _read_hand_shake_packet(self)
     local more_capabilities
     more_capabilities, pos = utils.get_byte2(packet, pos)
 
-    self.capabilities = bor(capabilities, lshift(more_capabilities, 16))
+    self._capabilities = band(self._capabilities, bor(capabilities, lshift(more_capabilities, 16)))
 
     pos = pos + 11 -- skip length of auth-plugin-data(1) and reserved(10)
 
@@ -714,7 +669,7 @@ local function _read_hand_shake_packet(self)
     pos = pos + 13
 
     local plugin, _
-    if band(self.capabilities, CLIENT_PLUGIN_AUTH) > 0 then
+    if band(self._capabilities, CLIENT_PLUGIN_AUTH) > 0 then
         plugin, _ = utils.from_cstring(packet, pos)
         if not plugin then
             -- EOF if version (>= 5.5.7 and < 5.5.10) or (>= 5.6.0 and < 5.6.2)
@@ -738,7 +693,7 @@ local function _append_auth_length(self, data)
         return data, 1 + n
     end
 
-    self.DEFAULT_CLIENT_FLAGS = bor(self.DEFAULT_CLIENT_FLAGS,
+    self._capabilities = bor(self._capabilities,
             CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA)
 
     if n <= 0xffff then
@@ -773,14 +728,14 @@ local function _write_hand_shake_response(self, auth_resp, plugin)
     local append_auth, len = _append_auth_length(self, auth_resp)
 
     if self.use_ssl then
-        if band(self.capabilities, CLIENT_SSL) == 0 then
+        if band(self._capabilities, CLIENT_SSL) == 0 then
             return "ssl disabled on server"
         end
 
         -- send a SSL Request Packet
-        local req = utils.set_byte4(bor(self.DEFAULT_CLIENT_FLAGS, CLIENT_SSL))
+        local req = utils.set_byte4(bor(self._capabilities, CLIENT_SSL))
                 .. utils.set_byte4(self._max_packet_size)
-                .. strchar(self.charset)
+                .. strchar(self._charset)
                 .. strrep("\0", 23)
 
         local packet_len = 4 + 4 + 1 + 23
@@ -789,7 +744,7 @@ local function _write_hand_shake_response(self, auth_resp, plugin)
             return "failed to send client authentication packet: " .. err
         end
 
-        local sock = self.sock
+        local sock = self._sock
 
         local ok, err = sock:sslhandshake(false, nil, self.ssl_verify)
         if not ok then
@@ -797,17 +752,17 @@ local function _write_hand_shake_response(self, auth_resp, plugin)
         end
     end
 
-    local req = utils.set_byte4(self.DEFAULT_CLIENT_FLAGS)
+    local req = utils.set_byte4(self._capabilities)
             .. utils.set_byte4(self._max_packet_size)
-            .. strchar(self.charset)
+            .. strchar(self._charset)
             .. strrep("\0", 23)
-            .. utils.to_cstring(self.user)
+            .. utils.to_cstring(self._user)
             .. append_auth
-            .. utils.to_cstring(self.database)
+            .. utils.to_cstring(self._db)
             .. utils.to_cstring(plugin)
 
-    local packet_len = 4 + 4 + 1 + 23 + #self.user + 1
-            + len + #self.database + 1 + #plugin + 1
+    local packet_len = 4 + 4 + 1 + 23 + #self._user + 1
+            + len + #self._db + 1 + #plugin + 1
 
     local bytes, err = _send_packet(self, req, packet_len)
     if not bytes then
@@ -1083,7 +1038,7 @@ local function _handle_auth_result(self, old_auth_data, plugin)
     end
 end
 
-
+--[[
 function _M._new(self)
     local sock, err = tcp()
     if not sock then
@@ -1091,7 +1046,7 @@ function _M._new(self)
     end
     return setmetatable({ sock = sock }, mt)
 end
-
+]]--
 
 function _M.set_timeout(self, timeout)
     local sock = self.sock
@@ -1102,7 +1057,7 @@ function _M.set_timeout(self, timeout)
     return sock:settimeout(timeout)
 end
 
-
+--[[
 function _M.new(self)
     local sock, err = tcp()
     if not sock then
@@ -1110,51 +1065,56 @@ function _M.new(self)
     end
     return setmetatable({ sock = sock }, mt)
 end
+]]--
 
+function _M.new(opts)
+    local obj = {}
 
-function _M.connect(self, opts)
-    local sock = self.sock
+    local sock, err = tcp()
     if not sock then
-        return nil, "not initialized"
+        return nil, err
     end
+
+    obj._sock = sock
 
     local max_packet_size = opts.max_packet_size
     if not max_packet_size then
         max_packet_size = 1024 * 1024 -- default 1 MB
     end
-    self._max_packet_size = max_packet_size
+    obj._max_packet_size = max_packet_size
 
     local ok, err
 
-    self.compact = opts.compact_arrays
+    obj.compact = opts.compact_arrays
 
-    self.database = opts.database or ""
-    self.user = opts.user or ""
+    obj._db = opts.database or ""
+    obj._user = opts.user or ""
 
-    self.charset = CHARSET_MAP[opts.charset or "_default"]
-    if not self.charset then
+    obj._charset = charset.charset_id[opts.charset or charset.DEFAULT_CHARSET]
+    if not obj._charset then
         return nil, "charset '" .. opts.charset .. "' is not supported"
     end
 
     local pool = opts.pool
 
-    self.ssl_verify = opts.ssl_verify
-    self.use_ssl = opts.ssl or opts.ssl_verify
+    obj.ssl_verify = opts.ssl_verify
+    obj.use_ssl = opts.ssl or opts.ssl_verify
 
-    self.password = opts.password or ""
+    obj.password = opts.password or ""
 
     local host = opts.host
     if host then
         local port = opts.port or 3306
         if not pool then
-            pool = self.user .. ":" .. self.database .. ":" .. host .. ":"
-                    .. port
+            pool = obj._user .. ":" .. obj._db .. ":" .. host .. ":" .. port
         end
 
+        --[[
         ok, err = sock:connect(host, port, { pool = pool,
                                              pool_size = opts.pool_size,
                                              backlog = opts.backlog })
-
+        ]]--
+        ok, err = sock:connect(host, port)
     else
         local path = opts.path
         if not path then
@@ -1162,10 +1122,10 @@ function _M.connect(self, opts)
         end
 
         if not pool then
-            pool = self.user .. ":" .. self.database .. ":" .. path
+            pool = obj._user .. ":" .. obj._db .. ":" .. path
         end
 
-        self.is_unix = true
+        obj.is_unix = true
         ok, err = sock:connect("unix:" .. path, { pool = pool,
                                                   pool_size = opts.pool_size,
                                                   backlog = opts.backlog })
@@ -1175,45 +1135,48 @@ function _M.connect(self, opts)
         return nil, err
     end
 
+    --[[
     local reused = sock:getreusedtimes()
 
     if reused and reused > 0 then
-        self.state = STATE_CONNECTED
-        return 1
+        obj.state = STATE_CONNECTED
+        return obj
     end
+    --]]
 
-    self.DEFAULT_CLIENT_FLAGS = bor(DEFAULT_CLIENT_FLAGS, CLIENT_PLUGIN_AUTH)
+    obj._capabilities = bor(default_capability, CLIENT_PLUGIN_AUTH)
 
     local auth_data, plugin, err, errno, sqlstate
-    = _read_hand_shake_packet(self)
+    = _read_hand_shake_packet(obj)
 
     if err ~= nil then
         return nil, err
     end
 
-    local auth_resp, err = _auth(self, auth_data, plugin)
+    local auth_resp, err = _auth(obj, auth_data, plugin)
     if not auth_resp then
         return nil, err
     end
 
-    err = _write_hand_shake_response(self, auth_resp, plugin)
+    err = _write_hand_shake_response(obj, auth_resp, plugin)
     if err ~= nil then
         return nil, err
     end
 
-    local err, errno, sqlstate = _handle_auth_result(self, auth_data, plugin)
+    local err, errno, sqlstate = _handle_auth_result(obj, auth_data, plugin)
     if err ~= nil then
         return nil, err, errno, sqlstate
     end
 
-    self.state = STATE_CONNECTED
+    obj.state = STATE_CONNECTED
+    obj.packet_noo = 3
 
-    return 1
+    return setmetatable(obj, mt)
 end
 
 
 function _M.set_keepalive(self, ...)
-    local sock = self.sock
+    local sock = self._sock
     if not sock then
         return nil, "not initialized"
     end
@@ -1229,7 +1192,7 @@ end
 
 
 function _M.get_reused_times(self)
-    local sock = self.sock
+    local sock = self._sock
     if not sock then
         return nil, "not initialized"
     end
@@ -1239,7 +1202,7 @@ end
 
 
 function _M.close(self)
-    local sock = self.sock
+    local sock = self._sock
     if not sock then
         return nil, "not initialized"
     end
@@ -1260,35 +1223,23 @@ function _M.server_ver(self)
 end
 
 
-local function send_query(self, query)
-    if self.state ~= STATE_CONNECTED then
-        return nil, "cannot send query in the current context: "
-                .. (self.state or "nil")
-    end
-
-    local sock = self.sock
+function _M.send_query(self, query)
+    local sock = self._sock
     if not sock then
-        return nil, "not initialized"
+        return "not initialized"
     end
 
-    self.packet_no = -1
+    self._packet_no = -1
 
     local cmd_packet = strchar(COM_QUERY) .. query
     local packet_len = 1 + #query
-
-    local bytes, err = _send_packet(self, cmd_packet, packet_len)
-    if not bytes then
-        return nil, err
+    local bytes, err = io.send_packet(self, cmd_packet, packet_len)
+    if err then
+        return  err
     end
 
-    self.state = STATE_COMMAND_SENT
-
-    --print("packet sent ", bytes, " bytes")
-
-    return bytes
+    return nil
 end
-_M.send_query = send_query
-
 
 local function read_result(self, est_nrows)
     if self.state ~= STATE_COMMAND_SENT then
@@ -1296,7 +1247,7 @@ local function read_result(self, est_nrows)
                 .. (self.state or "nil")
     end
 
-    local sock = self.sock
+    local sock = self._sock
     if not sock then
         return nil, "not initialized"
     end
@@ -1396,7 +1347,7 @@ _M.read_result = read_result
 
 
 function _M.query(self, query, est_nrows)
-    local bytes, err = send_query(self, query)
+    local bytes, err = _M.send_query(self, query)
     if not bytes then
         return nil, "failed to send query: " .. err
     end
@@ -1411,7 +1362,7 @@ end
 
 
 function _M.send_request(self, sql)
-    return self.sock:send(tabconcat(sql))
+    return self._sock:send(tabconcat(sql))
 end
 
 
@@ -1678,37 +1629,141 @@ function _M.cmd_filed_list(self, typ)
     end
 end
 
-function _M.get_proxy(conf, db)
-    if #conf.database ==0 then
-        return nil, "database is empty"
+function _M.use_db(self, name)
+    if self._db == name or #name == 0 then
+        return nil
     end
 
-    local proxy = {
-        default = conf.database[1].name,
-        database = {}
-    }
-
-    for _, item in ipairs(conf.database) do
-        local options = {
-            host = item.host,
-            port = item.port,
-            user = item.user,
-            password = item.password,
-            database = item.name,
-            charset = "utf8"
-        }
-        proxy.database[item.name] = options
+    local err
+    err = io.write_command(self, const.cmd.COM_INIT_DB, name)
+    if err ~= nil then
+        return err
     end
 
-    if db ~= nil and db ~= "" then
-        if proxy.database[db] ~= nil then
-            proxy.default = db
-        else
-            return nil, "db is denied for database configuration"
+    err = io.read_ok(self)
+    if err ~= nil then
+        return err
+    end
+
+    self._db = name
+
+    return nil
+end
+
+local function write_command_str_str(self,  cmd, arg1, arg2)
+    local data
+    if arg2 ~= nil and #arg2 > 0 then
+        data = arg1 .. strchar(0) .. strbyte(arg2)
+    else
+        data = arg1 .. strchar(0)
+    end
+
+    return io.write_command(self, cmd, data)
+end
+
+function _M.field_list(self, table, wildcard)
+    local data, err
+    err = write_command_str_str(self, const.cmd.COM_FIELD_LIST, table, wildcard)
+    if err ~= nil then
+        return nil, err
+    end
+
+    --[[
+    data, err = io.read_packet(self)
+    if err ~= nil then
+        return nil, err
+    end
+
+    if strbyte(data, 1) == const.ERR_HEADER then
+        return nil, io.handle_err_packet(self, strsub(data, 1))
+    end
+    --]]
+
+    local res = {}
+    local res_index = 1
+    while true do
+        data, err = io.read_packet(self)
+        if err ~= nil then
+            return nil, err
         end
+
+        if io.is_eof_packet(data) then
+            return res, nil
+        end
+
+        local item
+        item, err = field.parse(data)
+        if err ~= nil then
+            return nil, err
+        end
+
+        res[res_index] = item
+        res_index = res_index + 1
     end
 
-    return proxy
+    return res, nil
+end
+
+
+function _M.set_charset(self, cset, collation)
+    if charset.charset_id[cset] == nil then
+        return "invalid charset"
+    end
+
+    if collation == nil or collation == 0 then
+        collation = charset.collation_names[charset.charset_id[cset]]
+    end
+
+    if self._charset == cset and self.collation == collation then
+        return nil
+    end
+
+    if charset.collation_names[collation] == nil then
+        return "invalid collation"
+    end
+
+    local err = io.write_command(self, const.cmd.COM_QUERY, strfmt("SET NAMES %s COLLATE %s", cset, charset.collation_names[collation]))
+    if err ~= nil then
+        return err
+    end
+
+    err = io.read_ok(self)
+    if err ~= nil then
+        return err
+    end
+
+    self._charset = cset
+    self._collation = collation
+
+    return nil
+end
+
+function _M.set_autocommit(self, auto)
+    local err
+    if auto == nil then
+        err = io.exec(self, "set autocommit = 0")
+    else
+        err = io.exec(self, "set autocommit = 1")
+    end
+
+    if err ~= nil then
+        self:close()
+    end
+
+    return err
+end
+
+function _M.ping(self)
+    local cmd = strchar(0x0e)
+    self._packet_no = -1
+
+    local _, err = io.send_packet(self, cmd, #cmd)
+    if err ~= nil then
+        ngx.log(ngx.ERR, "send packet:" .. err)
+        return err
+    end
+
+    return io.read_ok(self)
 end
 
 return _M

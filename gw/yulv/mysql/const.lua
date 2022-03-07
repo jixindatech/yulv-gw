@@ -1,8 +1,7 @@
 local lshift = bit.lshift
+local bor = bit.bor
 
 local _M = {}
-
-_M.ERR_HEADER = 0xff
 
 _M.cmd = {
 	COM_SLEEP               = 0,
@@ -65,5 +64,22 @@ _M.client_capabilities = {
     	CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA   = lshift(1, 21),
 
 }
+
+_M.DEFAULT_CAPABILITY = bor(
+        _M.client_capabilities.CLIENT_LONG_PASSWORD,
+        _M.client_capabilities.CLIENT_LONG_FLAG,
+        _M.client_capabilities.CLIENT_CONNECT_WITH_DB,
+        _M.client_capabilities.CLIENT_PROTOCOL_41,
+        _M.client_capabilities.CLIENT_TRANSACTIONS,
+        _M.client_capabilities.CLIENT_SECURE_CONNECTION
+)
+
+_M.MAX_PAYLOAD_LEN = lshift(1, 24) - 1
+
+
+_M.OK_HEADER             = 0x00
+_M.ERR_HEADER            = 0xff
+_M.EOF_HEADER            = 0xfe
+_M.LOCAL_IN_FILE_HEADER  = 0xfb
 
 return _M

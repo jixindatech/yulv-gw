@@ -3,7 +3,6 @@ local iputils = require("resty.iputils")
 
 local schema = require("gw.schema")
 local config = require("gw.core.config")
-local const  = require("gw.yulv.const")
 
 local _M = {}
 local module_name = "ip"

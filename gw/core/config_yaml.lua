@@ -178,6 +178,10 @@ local function sync_data(self)
     self.timestamp = ngx_time()
     self.conf_version = gw_yaml_ctime
 
+    if self.post_func then
+        self.post_func(self.values)
+    end
+
     return true
 end
 
@@ -246,6 +250,8 @@ end
 function _M.new(name, config, options)
     local automatic = options and options.automatic
     local interval = options and options.interval
+    local filter_func = options and options.filter_func
+    local post_func = options and options.post_func
     local init_func = options and options.init_func
     local module_schema = options and options.schema
     local conf_version = options and options.conf_version
@@ -262,7 +268,9 @@ function _M.new(name, config, options)
         conf_version = conf_version,
         value = nil,
         schema = module_schema,
+        filter_func = filter_func,
         init_func = init_func,
+        post_func = post_func,
         last_err = nil,
         last_err_time = nil,
     }, mt)

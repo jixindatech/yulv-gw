@@ -5,7 +5,7 @@ local strsub = string.sub
 local cjson = require("cjson.safe")
 local schema = require("gw.schema")
 local config = require("gw.core.config")
-local const  = require("gw.yulv.const")
+local const  = require("gw.yulv.mysql.const")
 local match = require("gw.yulv.hooks.match")
 
 local _M = {}

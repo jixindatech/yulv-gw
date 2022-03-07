@@ -174,6 +174,10 @@ local function sync_data(self)
     self.values = values
     self.values_hash = values_hash
 
+    if self.post_func then
+        self.post_func(self.values)
+    end
+
     if changed then
         self.timestamp = data.timestamp or ngx_time()
         self.conf_version = self.conf_version + 1
@@ -232,7 +236,9 @@ end
 function _M.new(name, config, options)
     local automatic = options and options.automatic
     local interval = options and options.interval
-    local filter_fun = options and options.filter
+    local filter_fun = options and options.filter_func
+    local init_func = options and options.init_func
+    local post_func = options and options.post_func
     local module_schema = options and options.schema
 
     local key = key_prefix .. name
@@ -249,7 +255,9 @@ function _M.new(name, config, options)
         conf_version = 0,
         value = nil,
         schema = module_schema,
-        filter = filter_fun,
+        filter_func = filter_fun,
+        init_func = init_func,
+        post_func = post_func,
     }, mt)
 
     if automatic then

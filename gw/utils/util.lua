@@ -114,6 +114,14 @@ function _M.to_cstring(data)
     return data .. "\0"
 end
 
+function _M.lenenc_str(data, pos)
+    local len, position = _M.from_length_coded_bin(data, pos)
+    if len == nil then
+        return nil, position
+    end
+
+    return strsub(data, pos + len, position + len), position + len
+end
 
 function _M.from_cstring(data, i)
     local last = strfind(data, "\0", i, true)
@@ -162,6 +170,39 @@ function _M.from_length_coded_int(len)
                 strchar(rshift(len, 48)) ..
                 strchar(rshift(len, 56))
     end
+end
+
+function _M.from_length_coded_bin(data, pos)
+    local first = strbyte(data, pos)
+
+    if not first then
+        return nil, pos
+    end
+
+    if first >= 0 and first <= 250 then
+        return first, pos + 1
+    end
+
+    if first == 251 then
+        return null, pos + 1
+    end
+
+    if first == 252 then
+        pos = pos + 1
+        return _M.get_byte2(data, pos)
+    end
+
+    if first == 253 then
+        pos = pos + 1
+        return _M.get_byte3(data, pos)
+    end
+
+    if first == 254 then
+        pos = pos + 1
+        return _M.get_byte8(data, pos)
+    end
+
+    return nil, pos + 1
 end
 
 

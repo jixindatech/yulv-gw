@@ -75,7 +75,7 @@ log:
 #    rule_topic: yulv_rule
   file:
     access_log: 1
-    rule_log: 1
+#    rule_log: 1
 
 #etcd:
 #  host: "http://127.0.0.1:2379"   # etcd address
