@@ -336,7 +336,6 @@ function _M.write_command(obj, cmd, sql)
 end
 
 function _M.handle_ok_packet(obj, data)
-    local res = {}
     local pos = 1
     local affected_rows, insert_id
     affected_rows, pos = _from_length_coded_bin(data, pos)
@@ -352,7 +351,7 @@ function _M.handle_ok_packet(obj, data)
         obj._status = status
         pos = pos + 2
     end
-    return res {
+    return  {
         affected_rows = affected_rows,
         insert_id = insert_id,
         status = status or 0
@@ -466,7 +465,7 @@ function _M.read_result(obj, binary)
 
     local field_count = strbyte(data, 1)
 
-    if field_count == const.HEADER_OK then
+    if field_count == const.OK_HEADER then
         return _M.handle_ok_packet(obj, data)
     elseif field_count ==const.LOCAL_IN_FILE_HEADER then
         return nil, "ErrMalformPacket"
