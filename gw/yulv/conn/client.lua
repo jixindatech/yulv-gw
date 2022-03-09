@@ -31,6 +31,8 @@ local charset     = require("gw.yulv.mysql.charset")
 local client_const = require("gw.yulv.conn.const")
 local pool  = require("gw.yulv.backend.pool")
 local field       = require("gw.yulv.mysql.field")
+local stmt = require("gw.yulv.conn.client_stmt")
+local query = require("gw.yulv.conn.client_query")
 
 local _M = {}
 local mt = { __index = _M }
@@ -232,7 +234,6 @@ local function write_field_list(obj, fields)
     local eof = io.get_eof_packet(obj, 0)
     err = io.send_batch_packet(obj, eof, total, true)
     if err ~= nil then
-        ngx.log(ngx.ERR, "EEEEEEEEEEEEEEEEEEEErr:" .. err)
         return err
     end
 end
@@ -264,6 +265,9 @@ local function handle_field_list(obj, data)
     if err ~= nil then
         return err
     end
+
+    pool.close_db(obj._node, obj._db)
+
     return write_field_list(obj, fields)
 end
 
@@ -294,6 +298,8 @@ local function handle_use_db(obj, data)
         return err
     end
 
+    pool.close_db(obj._node, obj._db)
+
     return io.send_ok_packet(obj, nil)
 end
 
@@ -314,8 +320,13 @@ local function handle_query(obj ,data)
     end
     obj._node = node
 
-    --ngx.log(ngx.ERR, "node:" .. node._db .."state:" ..  node.state .."noo:".. node.packet_noo)
-    --ngx.log(ngx.ERR, "type:" .. type(node.is_quit_cmd))
+    local tokens = get_sql_tokens(data)
+
+    err = query.handle_query(obj, tokens)
+    if err ~= nil then
+        return err
+    end
+
     err = node:send_query(data)
     if err ~= nil then
         return err
@@ -332,6 +343,18 @@ local function handle_query(obj ,data)
     else
         return io.send_ok_packet(obj, result)
     end
+end
+
+local function handle_set_option(obj, data)
+    local node, err
+    node, err = pool.get_db(obj._db, obj._nodes[obj._db])
+    if err ~= nil then
+        return err
+    end
+    obj._node = node
+
+    local eof = io.get_eof_packet(obj)
+    return io.send_packet(obj, eof, #eof)
 end
 
 function _M.is_closed(self)
@@ -355,19 +378,20 @@ function _M.dispatch(self, body, ctx)
         err, err_msg = handle_field_list(self, data)
     elseif cmd == const.cmd.COM_STMT_PREPARE then
         ctx.data = data
-        ctx.fingerprint = fingerprint.parse(data)
-        local tokens = get_sql_tokens(data)
-        ctx.sqltype = tokens[1]
+        --ctx.fingerprint = fingerprint.parse(data)
+        --local tokens = get_sql_tokens(data)
+        --ctx.sqltype = tokens[1]
+        err = stmt.handle_prepare(self, data)
     elseif cmd == const.cmd.COM_STMT_EXECUTE then
-        return nil
+        return stmt.handle_execute(self, data)
     elseif cmd == const.cmd.COM_STMT_CLOSE then
-        return nil
+        return stmt.handle_close(self, data)
     elseif cmd == const.cmd.COM_STMT_SEND_LONG_DATA then
-        return nil
+        return stmt.handle_long_data(self, data)
     elseif cmd == const.cmd.COM_STMT_RESET then
-        return nil
+        return stmt.handle_reset(self, data)
     elseif cmd == const.cmd.COM_SET_OPTION then
-        return nil
+        return handle_set_option(self, data)
     elseif cmd == const.cmd.COM_QUIT then
         self._closed = true
         return nil
@@ -376,7 +400,7 @@ function _M.dispatch(self, body, ctx)
         err_msg = {strfmt("command %d not unsupported ", cmd)}
     end
 
-    if self._tx == nil then
+    if self._stmt == nil or transaction.is_in_transaction(self) ~= true then
         ngx.log(ngx.ERR,"close database handle")
         pool.close_db(self._node, self._db)
         self._node = nil
@@ -411,7 +435,10 @@ function _M.new(opts)
         _status = client_const.SERVER_STATUS_AUTOCOMMIT,
         _user = nil,
         _nodes = nil,
-        _tx = nil,
+
+        _stmt_id = 1,
+        _stmts = {},
+
         _node = nil,
         _db = nil,
         _affected_rows = 0,

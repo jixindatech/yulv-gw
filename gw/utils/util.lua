@@ -180,11 +180,11 @@ function _M.from_length_coded_bin(data, pos)
     end
 
     if first >= 0 and first <= 250 then
-        return first, pos + 1
+        return nil, pos + 1
     end
 
     if first == 251 then
-        return null, pos + 1
+        return nil, pos + 1, true
     end
 
     if first == 252 then

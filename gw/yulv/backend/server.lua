@@ -1640,7 +1640,7 @@ function _M.use_db(self, name)
         return err
     end
 
-    err = io.read_ok(self)
+    _, err = io.read_ok(self)
     if err ~= nil then
         return err
     end
@@ -1727,7 +1727,7 @@ function _M.set_charset(self, cset, collation)
         return err
     end
 
-    err = io.read_ok(self)
+    _, err = io.read_ok(self)
     if err ~= nil then
         return err
     end
@@ -1763,7 +1763,10 @@ function _M.ping(self)
         return err
     end
 
-    return io.read_ok(self)
+    _, err = io.read_ok(self)
+    if err ~= nil then
+        return err
+    end
 end
 
 return _M

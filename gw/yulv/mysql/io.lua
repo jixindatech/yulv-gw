@@ -195,7 +195,7 @@ function _M.send_ok_packet(obj, result)
         insert_id = utils.from_length_coded_int(0)
     else
         affected_rows = utils.from_length_coded_int(result.affected_rows)
-        insert_id = utils.from_length_coded_int(result.insert_id)
+        insert_id = utils.from_length_coded_int(result.last_insert_id)
     end
 
     local status_msg
@@ -276,11 +276,11 @@ function _M.read_ok(obj)
     local len, pos = utils.get_byte3(header, 1)
 
     if len == 0 then
-        return "empty packet"
+        return nil, "empty packet"
     end
 
     if len > obj._max_packet_size then
-        return "packet size too big: " .. len
+        return nil, "packet size too big: " .. len
     end
 
     local num = strbyte(header, pos)
@@ -291,34 +291,43 @@ function _M.read_ok(obj)
     data, err = sock:receive(len)
 
     if not data then
-        return "failed to read packet content: " .. err
+        return nil, "failed to read packet content: " .. err
     end
 
     local field_count = strbyte(data, 1)
-    if field_count == 0x00 then
-        return nil
+    if field_count == const.ERR_HEADER then
+        return nil, _M.parse_error_packet(data)
+    elseif field_count ~= const.OK_HEADER then
+        return nil, "not ok header"
     end
 
-    return "invalid ok type"
+    pos = 4
+    local affected_rows, last_insert_id, status, warning
+    affected_rows, pos = utils.from_length_coded_bin(data, pos)
+    last_insert_id, pos = utils.from_length_coded_bin(data, pos)
+
+    if obj._capabilities ~= nil and band(obj._capabilities, const.client_capabilities.CLIENT_PROTOCOL_41) > 0 then
+        status = utils.get_byte2(data, pos)
+        warning = utils.get_byte2(data, pos)
+    elseif obj._capabilities ~= nil and band(obj._capabilities, const.capabilities.CLIENT_TRANSACTIONS) > 0 then
+        status = utils.get_byte2(data, pos)
+    end
+
+    return { affected_rows = affected_rows, last_insert_id = last_insert_id, status = status, warning = warning }
 end
 
-local function exec(obj, cmd, sql)
+function _M.exec(obj, cmd, sql, args)
     local cmd_string = strchar(cmd) .. sql
-    local err = _M.send_packet(obj, cmd_string, #cmd_string)
-    if err ~= nil then
-        return nil, err
+    if args == nil then
+        local err = _M.send_packet(obj, cmd_string, #cmd_string)
+        if err ~= nil then
+            return nil, err
+        end
+    else
+
     end
 
     return _M.read_result(obj, false)
-end
-
-function _M.exec_command(obj, cmd, sql, args)
-    if args == nil or #args == 0 then
-        --// preprae
-        return
-    end
-
-    return _M.exec(obj, cmd, sql)
 end
 
 function _M.write_command(obj, cmd, sql)
@@ -337,9 +346,9 @@ end
 
 function _M.handle_ok_packet(obj, data)
     local pos = 1
-    local affected_rows, insert_id
+    local affected_rows, last_insert_id
     affected_rows, pos = _from_length_coded_bin(data, pos)
-    insert_id, pos = _from_length_coded_bin(data, pos)
+    last_insert_id, pos = _from_length_coded_bin(data, pos)
 
     local status
     if band(obj._capabilities, const.client_capabilities.CLIENT_PROTOCOL_41) > 0 then
@@ -351,9 +360,10 @@ function _M.handle_ok_packet(obj, data)
         obj._status = status
         pos = pos + 2
     end
+
     return  {
         affected_rows = affected_rows,
-        insert_id = insert_id,
+        last_insert_id = last_insert_id,
         status = status or 0
     }
 end
@@ -373,6 +383,7 @@ function _M.handle_err_packet(obj, data)
 
     return {
         code = code,
+        state = state,
         state = state,
         message = message
     }
@@ -480,7 +491,8 @@ function _M.is_eof_packet(data)
     return strbyte(data, 1) == const.EOF_HEADER and #data <= 5
 end
 
-function _M.get_eof_packet(obj, status)
+function _M.get_eof_packet(obj)
+    local status = obj._status or 0x0000
     local data = strchar(const.EOF_HEADER)
     if band(obj._capabilities, const.client_capabilities.CLIENT_PROTOCOL_41) > 0 then
         data = data .. utils.set_byte2(0x0000) .. utils.set_byte2(status)
@@ -537,6 +549,25 @@ function _M.write_rusult_set(obj, result)
     if err ~= nil then
         return err
     end
+end
+
+function _M.parse_error_packet(packet)
+   local err_no, pos = utils.get_byte2(packet, 2)
+   local marker = strsub(packet, pos, pos)
+   local sqlstate
+   if marker == '#' then
+            -- with sqlstate
+        pos = pos + 1
+        sqlstate = strsub(packet, pos, pos + 5 - 1)
+        pos = pos + 5
+   end
+
+   local message = strsub(packet, pos)
+   return {
+       errno = err_no,
+       message = message,
+       sqlstate = sqlstate,
+   }
 end
 
 return _M

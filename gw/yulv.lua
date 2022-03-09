@@ -101,7 +101,7 @@ function _M.content_phase()
         event = "login",
     }, "access")
 
-    local data, err_msg
+    local data
     while true do
         local context = new_context(ip)
         data, err = io.read_packet(client)
@@ -141,7 +141,7 @@ function _M.content_phase()
         ]]--
 
         context. timestamp = ngx.time()
-        err, err_msg = client:dispatch(data, context)
+        err = client:dispatch(data, context)
         if err ~= nil then
             if type(err) == "string" then
                 ngx.log(ngx.ERR, "yulv error:" .. err)
