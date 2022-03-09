@@ -177,7 +177,7 @@ function _M.send_batch_packet(obj, req, total, direct)
         total[index] = packet
     end
 
-    if direct ~= nil then
+    if direct == true then
         local _, err =sock:send(tabconcat(total))
         if err ~= nil then
             return err
@@ -316,6 +316,67 @@ function _M.read_ok(obj)
     return { affected_rows = affected_rows, last_insert_id = last_insert_id, status = status, warning = warning }
 end
 
+function _M.prepare(obj, sql)
+    local err
+    err = _M.write_command(obj, const.cmd.COM_STMT_PREPARE, sql)
+    if err ~= nil then
+        return nil, err
+    end
+
+    local data
+    data, err = io.read_packet(obj)
+    if err ~= nil then
+        return nil, err
+    end
+
+    local header = strbyte(data, 1)
+    if header == const.ERR_HEADER then
+        return nil, _M.parse_error_packet(data)
+    elseif header ~= const.OK_HEADER then
+        return nil, "malformed packet"
+    end
+
+    local pos = 2
+    local id, columns, params
+    local tx_params = {}
+    local tx_columns = {}
+    id, pos = utils.get_byte4(data, pos)
+    columns, pos = utils.get_byte2(data, pos)
+    params, pos = utils.get_byte2(data, pos)
+    if params > 0 then
+        local index = 1
+        while true do
+            local packet = _M.read_packet(obj)
+            if _M.is_eof_packet(packet) then
+                break
+            end
+            tx_params[index] = packet
+            index = index + 1
+        end
+    end
+
+    if columns > 0 then
+        local index = 1
+        while true do
+            local packet = _M.read_packet(obj)
+            if _M.is_eof_packet(packet) then
+                break
+            end
+            tx_columns[index] = packet
+            index = index + 1
+        end
+    end
+    return {
+        id = id,
+        params = params,
+        columns = columns,
+        tx_params = tx_params,
+        tx_columns = tx_columns,
+        args = { }
+    }
+
+end
+
 function _M.exec(obj, cmd, sql, args)
     local cmd_string = strchar(cmd) .. sql
     if args == nil then
@@ -324,7 +385,13 @@ function _M.exec(obj, cmd, sql, args)
             return nil, err
         end
     else
+        if args ~= nil then
+            local tx, err = _M.prepare(obj, sql)
+            if err ~= nil then
+                return err
+            end
 
+        end
     end
 
     return _M.read_result(obj, false)

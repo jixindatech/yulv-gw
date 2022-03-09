@@ -64,7 +64,7 @@ local _M = {}
 
 local function write_prepare(obj, tx)
     local total = {}
-    local packet = strbyte(const.OK_HEADER)
+    local packet = strchar(const.OK_HEADER)
         .. utils.set_byte4(tx.id)
         .. utils.set_byte2(tx.columns)
         .. utils.set_byte2(tx.params)
@@ -73,16 +73,17 @@ local function write_prepare(obj, tx)
 
     local eof = io.get_eof_packet(obj)
     if tx.tx_params ~= nil and #tx.tx_params > 0 then
-        for _, item in ipairs(tx.params) do
+        for _, item in ipairs(tx.tx_params) do
             io.send_batch_packet(obj, item, total, false)
         end
-        io.send_batch_packet(obj, eof, total, false)
     end
 
     if tx.tx_columns ~= nil and #tx.tx_columns > 0 then
-        for _, item in ipairs(tx.params) do
+        io.send_batch_packet(obj, eof, total, false)
+        for _, item in ipairs(tx.tx_columns) do
             io.send_batch_packet(obj, item, total, false)
         end
+        return io.send_batch_packet(obj, eof, total, true)
     end
 
     return io.send_batch_packet(obj, eof, total, true)
@@ -101,93 +102,26 @@ function _M.handle_prepare(obj, query)
         return err
     end
 
-    err = io.write_command(node, const.cmd.COM_STMT_PREPARE, query)
+    local tx
+    tx, err = io.prepare(node, query)
     if err ~= nil then
         return err
     end
-
-    data, err = io.read_packet(node)
-    if err ~= nil then
-        return err
-    end
-
-    local header = strbyte(data, 1)
-    if header == const.ERR_HEADER then
-        return io.parse_error_packet(data)
-    elseif header ~= const.OK_HEADER then
-        return "malformed packet"
-    end
-
-    local pos = 2
-    local id, columns, params
-    local tx_params = {}
-    local tx_columns = {}
-    id, pos = utils.get_byte4(data, pos)
-    columns, pos = utils.get_byte2(data, pos)
-    params, pos = utils.get_byte2(data, pos)
-    if params > 0 then
-        local index = 1
-        while true do
-            local packet = io.read_packet(node)
-            if io.is_eof_packet(packet) then
-                break
-            end
-            tx_params[index] = packet
-            index = index + 1
-        end
-    end
-
-    if columns > 0 then
-        local index = 1
-        while true do
-            local packet = io.read_packet(node)
-            if io.is_eof_packet(packet) then
-                break
-            end
-            tx_columns[index] = packet
-            index = index + 1
-        end
-    end
-
-    local tx = {
-        id = id,
-        params = params,
-        columns = columns,
-        tx_params = tx_params,
-        tx_columns = tx_columns,
-        args = { }
-    }
 
     if obj._stmt_id > 0xFFFFFFFE then
         obj._stmt_id = 1
     end
 
     obj._stmts[obj._stmt_id] = tx
-
+    tx.id = obj._stmt_id
     obj._stmt_id = obj._stmt_id + 1
 
+    err = io.write_command(node, const.cmd.COM_STMT_CLOSE, utils.set_byte4(tx.id))
+    if err ~= nil then
+        return err
+    end
+
     err = write_prepare(obj, tx)
-    if err ~= nil then
-        return err
-    end
-
-    data, err = io.read_ok(node)
-    if err ~= nil then
-        return
-    end
-
-    err = io.write_command(node, const.cmd.COM_STMT_CLOSE, utils.get_byte4(tx.id))
-    if err ~= nil then
-        return err
-    end
-
-    pos = 2
-    local affected_rows, last_insert_id, status
-    affected_rows, pos = utils.from_length_coded_bin(data, pos)
-    last_insert_id, pos = utils.from_length_coded_int(data, pos)
-    status, pos = utils.get_byte4(data, pos)
-
-    err = io.send_ok_packet(obj, {affected_rows = affected_rows, last_insert_id = last_insert_id, status = status })
     if err ~= nil then
         return err
     end
@@ -390,16 +324,17 @@ local function parse_prepare(stmt, data)
 end
 
 function _M.handle_execute(obj, data)
-    local node = obj._node
-    if node == nil then
-        return "invalid stmt node"
-    end
-
-    local err
-    err = parse_prepare(obj._stmts, data)
+    local err = parse_prepare(obj._stmts, data)
     if err ~= nil then
         return err
     end
+
+    local node
+    node, err = pool.get_db(obj._db, obj._nodes[obj._db])
+    if err ~= nil then
+        return err
+    end
+    obj._node = node
 
     err = io.send_packet(node, data, #data)
     if err ~= nil then
@@ -411,7 +346,7 @@ end
 function _M.handle_close(obj, data)
     local node = obj._node
     if node == nil then
-        return "invalid stmt node"
+        return "invalid stmt node2"
     end
 
     local pos = 1
@@ -430,7 +365,7 @@ end
 function _M.handle_long_data(obj, data)
     local node = obj._node
     if node == nil then
-        return "invalid stmt node"
+        return "invalid stmt node3"
     end
 
     local pos = 1
@@ -455,7 +390,7 @@ end
 function _M.handle_reset(obj, data)
     local node = obj._node
     if node == nil then
-        return "invalid stmt node"
+        return "invalid stmt node4"
     end
 
     local pos = 1
