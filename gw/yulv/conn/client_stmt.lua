@@ -26,39 +26,11 @@ if not ok then
     new_tab = function (narr, nrec) return {} end
 end
 
+local cjson = require("cjson.safe")
 local pool = require("gw.yulv.backend.pool")
 local io = require("gw.yulv.mysql.io")
 local const = require("gw.yulv.mysql.const")
 local utils = require("gw.utils.util")
-
-local MYSQL_TYPE_DECIMAL   = 0
-local MYSQL_TYPE_TINY      = 1
-local MYSQL_TYPE_SHORT     = 2
-local MYSQL_TYPE_LONG      = 3
-local MYSQL_TYPE_FLOAT     = 4
-local MYSQL_TYPE_DOUBLE    = 5
-local MYSQL_TYPE_NULL      = 6
-local MYSQL_TYPE_TIMESTAMP = 7
-local MYSQL_TYPE_LONGLONG  = 8
-local MYSQL_TYPE_INT24     = 9
-local MYSQL_TYPE_DATE      = 10
-local MYSQL_TYPE_TIME      = 11
-local MYSQL_TYPE_DATETIME  = 12
-local MYSQL_TYPE_YEAR      = 13
-local MYSQL_TYPE_NEWDATE   = 14
-local MYSQL_TYPE_VARCHAR   = 15
-local MYSQL_TYPE_BIT       = 16
-
-local MYSQL_TYPE_NEWDECIMAL    =  0xf6
-local MYSQL_TYPE_ENUM          =  0xf7
-local MYSQL_TYPE_SET           =  0xf8
-local MYSQL_TYPE_TINY_BLOB     =  0xf9
-local MYSQL_TYPE_MEDIUM_BLOB   =  0xfa
-local MYSQL_TYPE_LONG_BLOB     =  0xfb
-local MYSQL_TYPE_BLOB          =  0xfc
-local MYSQL_TYPE_VAR_STRING    =  0xfd
-local MYSQL_TYPE_STRING        =  0xfe
-local MYSQL_TYPE_GEOMETRY      =  0xff
 
 local _M = {}
 
@@ -90,7 +62,7 @@ local function write_prepare(obj, tx)
 end
 
 function _M.handle_prepare(obj, query)
-    local node, data, err
+    local node, err
     node, err = pool.get_db(obj._db, obj._nodes[obj._db])
     if err ~= nil then
         return err
@@ -133,77 +105,76 @@ local function bind_stmt_args(stmt, nulls, types, values)
     local value
 
     for i=1, stmt.params do
-        if band(strbyte(nulls, rshift(i, 3)), lshift(1, fmod(i, 8))) > 0 then
+        if band(strbyte(nulls, rshift(i-1, 3)+1), lshift(1, fmod(i-1, 8))) > 0 then
             args[i] = nil
             goto CONTINUE
         end
 
-        local tp = strbyte(types, lshift(i, 1))
-        local is_unsigned = band(strbyte(types, lshift(i)+1), 0x80) > 0
-        if tp == MYSQL_TYPE_NULL then
+        local tp = strbyte(types, i * 2 - 1)
+        local is_unsigned = band(strbyte(types, i * 2), 0x80) > 0
+
+        if tp == const.stmt.MYSQL_TYPE_NULL then
             args[i] = nil
             goto CONTINUE
-        elseif tp == MYSQL_TYPE_TINY then
-            if is_unsigned then
-                tp = tp .. strchar(0x80)
-            end
-            args[i] = { type = tp, value = strbyte(values, pos)}
+        elseif tp == const.stmt.MYSQL_TYPE_TINY then
+            args[i] = { type = tp, is_unsigned = is_unsigned, value = strchar(values, pos)}
             pos = pos + 1
             goto CONTINUE
-        elseif tp == MYSQL_TYPE_SHORT or tp == MYSQL_TYPE_YEAR  then
-            if is_unsigned then
-                tp = tp .. strchar(0x80)
-            end
-            value, pos  = utils.get_byte2(values, pos)
+        elseif tp == const.stmt.MYSQL_TYPE_SHORT or tp == const.stmt.MYSQL_TYPE_YEAR  then
+            --value, pos  = utils.get_byte2(values, pos)
+            value = strsub(values, pos, pos + 1)
+            pos = pos + 2
+            args[i]  = { type = tp, is_unsigned = is_unsigned, value = value }
+            goto CONTINUE
+        elseif tp == const.stmt.MYSQL_TYPE_INT24 or tp == const.stmt.MYSQL_TYPE_LONG then
+            --value, pos = utils.get_byte4(values, pos)
+            value = strsub(values, pos, pos + 3)
+            pos = pos + 4
+            args[i]  = { type = tp, is_unsigned = is_unsigned, value = value }
+            goto CONTINUE
+        elseif tp == const.stmt.MYSQL_TYPE_LONGLONG then
+            --value, pos = utils.get_byte8(values, pos)
+            value = strsub(values, pos, pos + 7)
+            pos = pos + 8
+            args[i]  = { type = tp, is_unsigned = is_unsigned, value = value }
+            goto CONTINUE
+        elseif tp == const.stmt.MYSQL_TYPE_FLOAT then
+            --value, pos= utils.get_byte4(values, pos)
+            value = strsub(values, pos, pos + 3)
+            pos = pos + 4
             args[i]  = { type = tp, value = value }
             goto CONTINUE
-        elseif tp == MYSQL_TYPE_INT24 or tp == MYSQL_TYPE_LONG then
-            if is_unsigned then
-                tp = tp .. strchar(0x80)
-            end
-            value, pos = utils.get_byte4(values, pos)
+        elseif tp == const.stmt.MYSQL_TYPE_DOUBLE then
+            --value, pos= utils.get_byte8(values, pos)
+            value = strsub(values, pos, pos + 7)
+            pos = pos + 8
             args[i]  = { type = tp, value = value }
             goto CONTINUE
-        elseif tp == MYSQL_TYPE_LONGLONG then
-            if is_unsigned then
-                tp = tp .. strchar(0x80)
-            end
-            value, pos = utils.get_byte8(values, pos)
-            args[i]  = { type = tp, value = value }
-            goto CONTINUE
-        elseif tp == MYSQL_TYPE_FLOAT then
-            value, pos= utils.get_byte4(values, pos)
-            args[i]  = { type = tp, value = value }
-            goto CONTINUE
-        elseif tp == MYSQL_TYPE_DOUBLE then
-            value, pos= utils.get_byte8(values, pos)
-            args[i]  = { type = tp, value = value }
-            goto CONTINUE
-        elseif tp == MYSQL_TYPE_DECIMAL or
-                tp == MYSQL_TYPE_NEWDECIMAL or
-                tp == MYSQL_TYPE_VARCHAR or
-                tp == MYSQL_TYPE_BIT or
-                tp == MYSQL_TYPE_ENUM or
-                tp == MYSQL_TYPE_SET or
-                tp == MYSQL_TYPE_TINY_BLOB or
-                tp == MYSQL_TYPE_MEDIUM_BLOB or
-                tp == MYSQL_TYPE_LONG_BLOB or
-                tp == MYSQL_TYPE_BLOB or
-                tp == MYSQL_TYPE_VAR_STRING or
-                tp == MYSQL_TYPE_STRING or
-                tp == MYSQL_TYPE_GEOMETRY or
-                tp == MYSQL_TYPE_DATE or
-                tp == MYSQL_TYPE_NEWDATE or
-                tp == MYSQL_TYPE_TIMESTAMP or
-                tp == MYSQL_TYPE_DATETIME or
-                tp == MYSQL_TYPE_TIME then
+        elseif tp == const.stmt.MYSQL_TYPE_DECIMAL or
+                tp == const.stmt.MYSQL_TYPE_NEWDECIMAL or
+                tp == const.stmt.MYSQL_TYPE_VARCHAR or
+                tp == const.stmt.MYSQL_TYPE_BIT or
+                tp == const.stmt.MYSQL_TYPE_ENUM or
+                tp == const.stmt.MYSQL_TYPE_SET or
+                tp == const.stmt.MYSQL_TYPE_TINY_BLOB or
+                tp == const.stmt.MYSQL_TYPE_MEDIUM_BLOB or
+                tp == const.stmt.MYSQL_TYPE_LONG_BLOB or
+                tp == const.stmt.MYSQL_TYPE_BLOB or
+                tp == const.stmt.MYSQL_TYPE_VAR_STRING or
+                tp == const.stmt.MYSQL_TYPE_STRING or
+                tp == const.stmt.MYSQL_TYPE_GEOMETRY or
+                tp == const.stmt.MYSQL_TYPE_DATE or
+                tp == const.stmt.MYSQL_TYPE_NEWDATE or
+                tp == const.stmt.MYSQL_TYPE_TIMESTAMP or
+                tp == const.stmt.MYSQL_TYPE_DATETIME or
+                tp == const.stmt.MYSQL_TYPE_TIME then
             if #values > pos then
                 local len, null
                 len, pos, null = utils.from_length_coded_bin(values, pos)
                 if null  then
                     value = nil
                 else
-                    value = strsub(values, pos, pos + len)
+                    value = strsub(values, pos, pos + len - 1)
                     pos = pos + len
                 end
                 args[i]  = { type = tp, value = value }
@@ -214,117 +185,48 @@ local function bind_stmt_args(stmt, nulls, types, values)
 
         ::CONTINUE::
     end
+
 end
 
-function _M.write(obj, stmt)
-    local nulls, types, values
-    local flag = 0
 
-    if stmt.params > 0 then
-        types = new_tab(0, lshift(stmt.params, 1))
-        values = new_tab(0, stmt.params)
-        nulls = new_tab(0, rshift((stmt.params + 7), 3))
-
-        for i, item in ipairs(stmt.args) do
-            if item == nil then
-                local bits = nulls[modf(i-1, 8) + 1] or 0
-                nulls[modf(i-1, 8) + 1] = strbyte(bor(bits, lshift(1, fmod(i - 1, 8))))
-                types[i] = strbyte(MYSQL_TYPE_NULL)
-            end
-
-            flag = 1
-            if item.type  == MYSQL_TYPE_TINY then
-                types[i] = MYSQL_TYPE_TINY
-                values[i] = item.value
-            elseif item.type  == MYSQL_TYPE_SHORT then
-                types[i] = MYSQL_TYPE_SHORT
-                values[i] = item.value
-            elseif item.type  == MYSQL_TYPE_LONG then
-                types[i] = MYSQL_TYPE_LONG
-                values[i] = item.value
-            elseif item.type  == MYSQL_TYPE_LONGLONG then
-                types[i] = MYSQL_TYPE_LONGLONG
-                values[i] = item.value
-            elseif item.type  == MYSQL_TYPE_FLOAT then
-                types[i] = MYSQL_TYPE_FLOAT
-                values[i] = item.value
-            elseif item.type  == MYSQL_TYPE_DOUBLE then
-                types[i] = MYSQL_TYPE_DOUBLE
-                values[i] = item.value
-            elseif item.type == MYSQL_TYPE_DECIMAL or
-                    item.type == MYSQL_TYPE_NEWDECIMAL or
-                    item.type == MYSQL_TYPE_VARCHAR or
-                    item.type == MYSQL_TYPE_BIT or
-                    item.type == MYSQL_TYPE_ENUM or
-                    item.type == MYSQL_TYPE_SET or
-                    item.type == MYSQL_TYPE_TINY_BLOB or
-                    item.type == MYSQL_TYPE_MEDIUM_BLOB or
-                    item.type == MYSQL_TYPE_LONG_BLOB or
-                    item.type == MYSQL_TYPE_BLOB or
-                    item.type == MYSQL_TYPE_VAR_STRING or
-                    item.type == MYSQL_TYPE_STRING or
-                    item.type == MYSQL_TYPE_GEOMETRY or
-                    item.type == MYSQL_TYPE_DATE or
-                    item.type == MYSQL_TYPE_NEWDATE or
-                    item.type == MYSQL_TYPE_TIMESTAMP or
-                    item.type == MYSQL_TYPE_DATETIME or
-                    item.type == MYSQL_TYPE_TIME then
-                types[i] = item.type
-                values[i] = utils.from_length_coded_int(#item.value) .. item.value
-            else
-                return "invalid types"
-            end
-        end
-    end
-
-    local data = utils.get_byte4(stmt.id) .. 0x00 .. utils.set_byte4(1)
-    if stmt.params > 0 then
-        data = data .. tabconcat(nulls) .. flag
-        if flag == 1 then
-            data = data .. tabconcat(types) .. tabconcat(values)
-        end
-    end
-
-    local err = io.write_command(obj, const.cmd.COM_STMT_EXECUTE, data)
-    if err ~= nil then
-        return er
-    end
-end
-
-local function parse_prepare(stmt, data)
+local function parse_prepare(stmts, data)
     local pos = 1
     local id
     id, pos = utils.get_byte4(data, pos)
-    if nil == stmt[id] then
-        return "invalid stmt id"
+    local stmt =stmts[id]
+    if nil == stmt then
+        return nil, "invalid stmt id"
     end
 
     local flag = strbyte(data, pos)
     pos = pos + 1
     if flag ~= 0 then
-        return "unsupported flag:" .. flag
+        return nil, "unsupported flag:" .. flag
     end
 
     pos = pos + 4
     local nulls, types, values
+
     if stmt.params > 0 then
         local len = rshift(stmt.params + 7, 3)
-        nulls = strsub(data, pos, pos+len)
+        nulls = strsub(data, pos, pos+len-1)
         pos = pos + len
         if strbyte(data, pos) == 1 then
             pos = pos + 1
-            len = lshift(stmt.params, 1)
-            types = strsub(data, pos, pos+len)
+            len = stmt.params * 2
+            types = strsub(data, pos, pos+len-1)
             pos = pos + len
             values = strsub(data, pos)
         end
 
         bind_stmt_args(stmt, nulls, types, values)
     end
+
+    return id, nil
 end
 
 function _M.handle_execute(obj, data)
-    local err = parse_prepare(obj._stmts, data)
+    local id, err = parse_prepare(obj._stmts, data)
     if err ~= nil then
         return err
     end
@@ -336,7 +238,14 @@ function _M.handle_execute(obj, data)
     end
     obj._node = node
 
-    err = io.send_packet(node, data, #data)
+    local sql = obj._stmts[id].sql
+    local result
+    result, err = io.exec(node, const.cmd.COM_QUERY, sql, obj._stmts[id].args)
+    if err ~= nil then
+        return err
+    end
+
+    err = io.send_ok_packet(obj, result)
     if err ~= nil then
         return err
     end

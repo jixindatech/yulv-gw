@@ -82,4 +82,35 @@ _M.ERR_HEADER            = 0xff
 _M.EOF_HEADER            = 0xfe
 _M.LOCAL_IN_FILE_HEADER  = 0xfb
 
+_M.stmt = {
+    MYSQL_TYPE_DECIMAL   = 0,
+    MYSQL_TYPE_TINY      = 1,
+    MYSQL_TYPE_SHORT     = 2,
+    MYSQL_TYPE_LONG      = 3,
+    MYSQL_TYPE_FLOAT     = 4,
+    MYSQL_TYPE_DOUBLE    = 5,
+    MYSQL_TYPE_NULL      = 6,
+    MYSQL_TYPE_TIMESTAMP = 7,
+    MYSQL_TYPE_LONGLONG  = 8,
+    MYSQL_TYPE_INT24     = 9,
+    MYSQL_TYPE_DATE      = 10,
+    MYSQL_TYPE_TIME      = 11,
+    MYSQL_TYPE_DATETIME  = 12,
+    MYSQL_TYPE_YEAR      = 13,
+    MYSQL_TYPE_NEWDATE   = 14,
+    MYSQL_TYPE_VARCHAR   = 15,
+    MYSQL_TYPE_BIT       = 16,
+
+    MYSQL_TYPE_NEWDECIMAL    =  0xf6,
+    MYSQL_TYPE_ENUM          =  0xf7,
+    MYSQL_TYPE_SET           =  0xf8,
+    MYSQL_TYPE_TINY_BLOB     =  0xf9,
+    MYSQL_TYPE_MEDIUM_BLOB   =  0xfa,
+    MYSQL_TYPE_LONG_BLOB     =  0xfb,
+    MYSQL_TYPE_BLOB          =  0xfc,
+    MYSQL_TYPE_VAR_STRING    =  0xfd,
+    MYSQL_TYPE_STRING        =  0xfe,
+    MYSQL_TYPE_GEOMETRY      =  0xff,
+}
+
 return _M

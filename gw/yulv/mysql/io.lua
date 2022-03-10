@@ -13,6 +13,9 @@ local bor = bit.bor
 local rshift = bit.rshift
 
 local math = math
+local modf = math.modf
+local fmod = math.fmod
+local floor = math.floor
 
 local tabconcat = table.concat
 local tabunpack = table.unpack
@@ -23,8 +26,12 @@ local const   = require("gw.yulv.mysql.const")
 local errstate = require("gw.yulv.mysql.errstate")
 local errmsg   = require("gw.yulv.mysql.errmsg")
 local errno    = require("gw.yulv.mysql.errno")
-local io = require("gw.yulv.mysql.io")
 local field = require("gw.yulv.mysql.field")
+
+local ok, new_tab = pcall(require, "table.new")
+if not ok then
+    new_tab = function (narr, nrec) return {} end
+end
 
 local HEADER_LEN = 4
 local HEADER_OK = 0x00
@@ -324,7 +331,7 @@ function _M.prepare(obj, sql)
     end
 
     local data
-    data, err = io.read_packet(obj)
+    data, err = _M.read_packet(obj)
     if err ~= nil then
         return nil, err
     end
@@ -366,15 +373,16 @@ function _M.prepare(obj, sql)
             index = index + 1
         end
     end
+
     return {
         id = id,
+        sql = sql,
         params = params,
         columns = columns,
         tx_params = tx_params,
         tx_columns = tx_columns,
         args = { }
     }
-
 end
 
 function _M.exec(obj, cmd, sql, args)
@@ -391,6 +399,12 @@ function _M.exec(obj, cmd, sql, args)
                 return err
             end
 
+            err = _M.write_stmt(obj, tx, args)
+            if err ~= nil then
+                return err
+            end
+
+            return _M.read_result(obj, true)
         end
     end
 
@@ -484,7 +498,7 @@ function _M.read_result_columns(obj)
     return res, nil
 end
 
-function _M.read_result_rows(obj)
+function _M.read_result_rows(obj, binary)
     local data, err
     local res = {}
     local index = 1
@@ -520,7 +534,7 @@ function _M.read_resultset(obj, field_count, binary)
         return nil, err
     end
 
-    rows, err = _M.read_result_rows(obj)
+    rows, err = _M.read_result_rows(obj, binary)
     if err ~= nil then
         return nil, err
     end
@@ -615,6 +629,130 @@ function _M.write_rusult_set(obj, result)
     local bytes, err = obj._sock:send(tabconcat(data))
     if err ~= nil then
         return err
+    end
+end
+
+function _M.write_stmt(obj, tx, args)
+    local nulls, types, values
+    local flag = 0
+
+    if tx.params > 0 then
+        types = new_tab(0, lshift(tx.params, 1))
+        values = new_tab(0, tx.params)
+        nulls = new_tab(0, rshift((tx.params + 7), 3))
+
+        for i, item in ipairs(args) do
+            if item == nil then
+                local bits = nulls[modf(i-1, 8) + 1] or 0
+                nulls[modf(i-1, 8) + 1] = strbyte(bor(bits, lshift(1, fmod(i - 1, 8))))
+                types[i] = strbyte(const.stmt.MYSQL_TYPE_NULL)
+            end
+
+            flag = 1
+            local typ
+            if item.type  == const.stmt.MYSQL_TYPE_TINY then
+                typ = strchar(const.stmt.MYSQL_TYPE_TINY)
+                if item.is_unsigned then
+                    typ = typ .. strchar(0x80)
+                else
+                    typ = typ .. strchar(0x00)
+                end
+                types[i] = typ
+                values[i] = item.value
+            elseif  item.type == const.stmt.MYSQL_TYPE_SHORT then
+                typ = strchar(const.stmt.MYSQL_TYPE_SHORT)
+                if item.is_unsigned then
+                    typ = typ .. strchar(0x80)
+                else
+                    typ = typ .. strchar(0x00)
+                end
+                types[i] = typ
+                values[i] = item.value
+            elseif item.type  == const.stmt.MYSQL_TYPE_YEAR then
+                typ = strchar(const.stmt.MYSQL_TYPE_YEAR)
+                if item.is_unsigned then
+                    typ = typ .. strchar(0x80)
+                else
+                    typ = typ .. strchar(0x00)
+                end
+                types[i] = typ
+                values[i] = item.value
+            elseif item.type  == const.stmt.MYSQL_TYPE_INT24 then
+                typ = strchar(const.stmt.MYSQL_TYPE_INT24)
+                if item.is_unsigned then
+                    typ = typ .. strchar(0x80)
+                else
+                    typ = typ .. strchar(0x00)
+                end
+                types[i] = typ
+                values[i] = item.value
+            elseif item.type  == const.stmt.MYSQL_TYPE_LONG then
+                typ = strchar(const.stmt.MYSQL_TYPE_LONG)
+                if item.is_unsigned then
+                    typ = typ .. strchar(0x80)
+                else
+                    typ = typ .. strchar(0x00)
+                end
+                types[i] = typ
+                values[i] = item.value
+            elseif item.type  == const.stmt.MYSQL_TYPE_LONGLONG then
+                typ = strchar(const.stmt.MYSQL_TYPE_LONGLONG)
+                if item.is_unsigned then
+                    typ = typ .. strchar(0x80)
+                else
+                    typ = typ .. strchar(0x00)
+                end
+                types[i] = typ
+                values[i] = item.value
+            elseif item.type  == const.stmt.MYSQL_TYPE_FLOAT then
+                types[i] = strchar(const.stmt.MYSQL_TYPE_FLOAT) .. strchar(0x00)
+                values[i] = item.value
+            elseif item.type  == const.stmt.MYSQL_TYPE_DOUBLE then
+                types[i] = strchar(const.stmt.MYSQL_TYPE_DOUBLE) .. strchar(0x00)
+                values[i] = item.value
+            elseif item.type == const.stmt.MYSQL_TYPE_DECIMAL or
+                    item.type == const.stmt.MYSQL_TYPE_NEWDECIMAL or
+                    item.type == const.stmt.MYSQL_TYPE_VARCHAR or
+                    item.type == const.stmt.MYSQL_TYPE_BIT or
+                    item.type == const.stmt.MYSQL_TYPE_ENUM or
+                    item.type == const.stmt.MYSQL_TYPE_SET or
+                    item.type == const.stmt.MYSQL_TYPE_TINY_BLOB or
+                    item.type == const.stmt.MYSQL_TYPE_MEDIUM_BLOB or
+                    item.type == const.stmt.MYSQL_TYPE_LONG_BLOB or
+                    item.type == const.stmt.MYSQL_TYPE_BLOB or
+                    item.type == const.stmt.MYSQL_TYPE_VAR_STRING or
+                    item.type == const.stmt.MYSQL_TYPE_STRING or
+                    item.type == const.stmt.MYSQL_TYPE_GEOMETRY or
+                    item.type == const.stmt.MYSQL_TYPE_DATE or
+                    item.type == const.stmt.MYSQL_TYPE_NEWDATE or
+                    item.type == const.stmt.MYSQL_TYPE_TIMESTAMP or
+                    item.type == const.stmt.MYSQL_TYPE_DATETIME or
+                    item.type == const.stmt.MYSQL_TYPE_TIME then
+                types[i] = strchar(item.type) .. strchar(0x00)
+                values[i] = utils.from_length_coded_int(#item.value) .. item.value
+            else
+                return "invalid types"
+            end
+        end
+    end
+
+    ngx.log(ngx.ERR, cjson.encode(tx))
+
+    local data = utils.set_byte4(tx.id) .. strchar(0x00) .. utils.set_byte4(1)
+    if tx.params > 0 then
+        if #nulls == 0 then
+            nulls[1] = strchar(0x00)
+        end
+        data = data .. tabconcat(nulls) .. strchar(flag)
+        if flag == 1 then
+            data = data .. tabconcat(types) .. tabconcat(values)
+        end
+    end
+
+    ngx.log(ngx.ERR, "cmd exec command")
+    local err = _M.write_command(obj, const.cmd.COM_STMT_EXECUTE, data)
+    if err ~= nil then
+        return er
     end
 end
 

@@ -108,7 +108,19 @@ function _M.set_byte4(n)
             band(rshift(n, 16), 0xff),
             band(rshift(n, 24), 0xff))
 end
-
+--[[
+TODO: lua number conflicts with rshift when bytes greater than 4
+function _M.set_byte8(n)
+    return strchar(band(n, 0xff),
+            band(rshift(n, 8), 0xff),
+            band(rshift(n, 16), 0xff),
+            band(rshift(n, 24), 0xff),
+            band(rshift(n, 32), 0xff),
+            band(rshift(n, 40), 0xff),
+            band(rshift(n, 48), 0xff),
+            band(rshift(n, 56), 0xff))
+end
+]]--
 
 function _M.to_cstring(data)
     return data .. "\0"
@@ -180,7 +192,7 @@ function _M.from_length_coded_bin(data, pos)
     end
 
     if first >= 0 and first <= 250 then
-        return nil, pos + 1
+        return first, pos + 1
     end
 
     if first == 251 then

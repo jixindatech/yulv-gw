@@ -23,7 +23,6 @@ local error = error
 local tonumber = tonumber
 local to_int = math.floor
 
-
 local has_rsa, resty_rsa = pcall(require, "resty.rsa")
 
 local utils = require("gw.utils.util")
@@ -1231,9 +1230,9 @@ function _M.send_query(self, query)
 
     self._packet_no = -1
 
-    local cmd_packet = strchar(COM_QUERY) .. query
+    local cmd_packet = strchar(const.cmd.COM_QUERY) .. query
     local packet_len = 1 + #query
-    local bytes, err = io.send_packet(self, cmd_packet, packet_len)
+    local err = io.send_packet(self, cmd_packet, packet_len)
     if err then
         return  err
     end
