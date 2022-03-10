@@ -188,7 +188,6 @@ local function bind_stmt_args(stmt, nulls, types, values)
 
 end
 
-
 local function parse_prepare(stmts, data)
     local pos = 1
     local id

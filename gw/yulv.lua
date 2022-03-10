@@ -110,36 +110,6 @@ function _M.content_phase()
             break
         end
 
-        --[[
-        if pass == false then
-            action = req_hook.request(context)
-            if action ~= nil then
-                logger.log({
-                    transaction = transaction,
-                    id = context.rule_id,
-                    timestamp = ngx.time(),
-                    cmd = context.cmd,
-                    ip = ip,
-                    user = client._user,
-                    database = proxy.default,
-                    event = "rule",
-                    sqltype = context.sqltype or "",
-                    sql = context.data or "",
-                    fingerprint = context.fingerprint or "",
-                    rows = context.record_count or 0,
-                    action = action_code[action],
-                }, "rule")
-
-                if action == "deny" then
-                    client:send_error_packet("ER_UNKNOWN_ERROR", {err})
-                    goto CONTINUE
-                elseif action == "allow" then
-                    pass = true
-                end
-            end
-        end
-        ]]--
-
         context. timestamp = ngx.time()
         err = client:dispatch(data, context)
         if err ~= nil then
@@ -158,93 +128,6 @@ function _M.content_phase()
         if client:is_closed() then
             break
         end
-
-        --[[
-        if srv.is_quit_cmd(context) then
-            client:send_ok_packet(nil)
-            break
-        end
-
-        if proxy.default ~= server_name then
-            ngx.log(ngx.ERR, "server_name:" .. server_name)
-            --TODO: fix keepalive for connection pool !!!
-            -- server:set_keepalive()
-
-            server = srv:new()
-            server_name = proxy.default
-            ok, err = server:connect(proxy.database[server_name])
-            if err ~= nil then
-                client:send_error_packet("ER_UNKNOWN_ERROR", {err})
-                break
-            end
-        end
-
-        err = server:send_request(req)
-        if err == "timeout" then
-            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
-            break
-        end
-
-        local resp
-        resp, err = server:get_response(context)
-        if err == "timeout" then
-            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
-            break
-        end
-
-        if err ~= nil then
-            ngx.log(ngx.ERR, "err:" .. err)
-        end
-
-        if pass == false then
-            action = resp_hook.response(context)
-            if action ~= nil then
-                logger.log({
-                    transaction = transaction,
-                    cmd = context.cmd,
-                    id = context.rule_id,
-                    timestamp = ngx.time(),
-                    ip = ip,
-                    user = client._user,
-                    database = proxy.default,
-                    event = "rule",
-                    sqltype = context.sqltype or "",
-                    sql = context.data or "",
-                    fingerprint = context.fingerprint or "",
-                    rows = context.record_count or 0,
-                    action = action_code[action],
-                }, "rule")
-
-                if action == "deny" then
-                    client:send_error_packet("ER_UNKNOWN_ERROR", {err})
-                    goto CONTINUE
-                elseif action == "allow" then
-                    pass = true
-                end
-            end
-        end
-
-        local bytes
-        bytes, err = client:send_response(resp)
-        if err == "timeout" then
-            client:send_error_packet("ER_UNKNOWN_ERROR", {err})
-            break
-        end
-
-        logger.log({
-            transaction = transaction,
-            timestamp = ngx.time(),
-            ip = ip,
-            user = client._user,
-            database = proxy.default,
-            cmd = context.cmd,
-            event = "sql",
-            sqltype = context.sqltype or "",
-            sql = context.data or "",
-            fingerprint = context.fingerprint or "",
-            rows = context.record_count or 0,
-        }, "access")
-        --]]
 
         ::CONTINUE::
     end

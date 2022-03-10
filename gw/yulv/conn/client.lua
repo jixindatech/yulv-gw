@@ -32,7 +32,7 @@ local client_const = require("gw.yulv.conn.const")
 local pool  = require("gw.yulv.backend.pool")
 local field       = require("gw.yulv.mysql.field")
 local stmt = require("gw.yulv.conn.client_stmt")
-local query = require("gw.yulv.conn.client_query")
+local transaction = require("gw.yulv.conn.client_transaction")
 
 local _M = {}
 local mt = { __index = _M }
@@ -183,8 +183,6 @@ function _M.do_handshake(self)
         return err
     end
 
-    self._packet_no = 0
-
     return nil
 end
 
@@ -314,17 +312,34 @@ end
 
 local function handle_query(obj ,data)
     local node, err
-    node, err = pool.get_db(obj._db, obj._nodes[obj._db])
-    if err ~= nil then
-        return err
+    if transaction.is_in_transaction(obj) then
+        node = obj._node
+        if node == nil then
+            ngx.log(ngx.ERR, "?????")
+            return "invalid transaction node"
+        end
+    else
+        node, err = pool.get_db(obj._db, obj._nodes[obj._db])
+        if err ~= nil then
+            return err
+        end
+        obj._node = node
     end
-    obj._node = node
 
     local tokens = get_sql_tokens(data)
+    ngx.log(ngx.ERR, cjson.encode(tokens))
+    local query_cmd = strlower(tokens[1])
 
-    err = query.handle_query(obj, tokens)
-    if err ~= nil then
-        return err
+    if query_cmd == "begin" then
+        return transaction.handle_begin(obj, data)
+    elseif query_cmd == "start" and strlower(tokens[2]) == "transaction" then
+        return transaction.handle_begin(obj, data)
+    elseif query_cmd == "commit" then
+        return transaction.handle_commit(obj, data)
+    elseif query_cmd == "rollback" then
+        return transaction.handle_rollback(obj, data)
+    elseif query_cmd == "set" then
+
     end
 
     err = node:send_query(data)
@@ -336,6 +351,11 @@ local function handle_query(obj ,data)
     result, err = io.read_result(node, false)
     if err ~= nil then
         return err
+    end
+
+    if transaction.is_in_transaction(obj) ~= true then
+        pool.close_db(obj._node, obj._db)
+        obj._node = nil
     end
 
     if result.rows ~=nil and result.colums ~= nil then
@@ -378,9 +398,6 @@ function _M.dispatch(self, body, ctx)
         err, err_msg = handle_field_list(self, data)
     elseif cmd == const.cmd.COM_STMT_PREPARE then
         ctx.data = data
-        --ctx.fingerprint = fingerprint.parse(data)
-        --local tokens = get_sql_tokens(data)
-        --ctx.sqltype = tokens[1]
         err = stmt.handle_prepare(self, data)
     elseif cmd == const.cmd.COM_STMT_EXECUTE then
         return stmt.handle_execute(self, data)
@@ -399,7 +416,7 @@ function _M.dispatch(self, body, ctx)
         err = "ER_UNKNOWN_ERROR"
         err_msg = {strfmt("command %d not unsupported ", cmd)}
     end
-
+    --[[
     if self._stmt == nil or transaction.is_in_transaction(self) ~= true then
         ngx.log(ngx.ERR,"close database handle")
         pool.close_db(self._node, self._db)
@@ -407,7 +424,7 @@ function _M.dispatch(self, body, ctx)
     else
         ngx.log(ngx.ERR,"in transaction")
     end
-
+    ]]--
     return err, err_msg
 end
 

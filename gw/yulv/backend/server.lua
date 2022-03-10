@@ -1085,7 +1085,6 @@ function _M.new(opts)
     local ok, err
 
     obj.compact = opts.compact_arrays
-
     obj._db = opts.database or ""
     obj._user = opts.user or ""
 

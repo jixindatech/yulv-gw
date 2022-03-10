@@ -386,6 +386,8 @@ function _M.prepare(obj, sql)
 end
 
 function _M.exec(obj, cmd, sql, args)
+    obj._packet_no = -1
+
     local cmd_string = strchar(cmd) .. sql
     if args == nil then
         local err = _M.send_packet(obj, cmd_string, #cmd_string)
