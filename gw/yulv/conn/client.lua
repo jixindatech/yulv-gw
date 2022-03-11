@@ -13,6 +13,7 @@ local lshift = bit.lshift
 local bor = bit.bor
 local rshift = bit.rshift
 local band = bit.band
+local bnot =bit.bnot
 
 local math = math
 
@@ -310,6 +311,52 @@ local function hand_ping(obj)
     return true
 end
 
+local function handle_set(obj, tokens)
+    if tokens[2] ~= nil then
+        --set autocommit = 0
+        local commit = strlower(tokens[2])
+        if commit == "autocommit" or
+                commit == "@@autocommit" or
+                commit == "@@session.autocommit" then
+            if tokens[4] == nil then
+                return false, "invalid autocommit parameter"
+            end
+
+            local flag = tokens[4]
+            if flag == "1" or flag == "on" then
+                obj._status = bor(obj._status, client_const.SERVER_STATUS_AUTOCOMMIT)
+                if transaction.is_in_transaction(obj) then
+                    local node = obj._node
+                    if node == nil then
+                        return false, "invalid transaction node"
+                    end
+
+                    local result, err = io.exec(node, const.cmd.COM_QUERY, "set autocommit = 1")
+                    if err ~= nil then
+                        return false, err
+                    end
+                    err = io.send_ok_packet(obj, result)
+                    if err ~= nil then
+                        return false, err
+                    end
+
+                    return true, nil
+                end
+            elseif flag == "0" or flag == "off" then
+                obj._status = band(obj._status, bnot(client_const.SERVER_STATUS_AUTOCOMMIT))
+                local err = io.send_ok_packet(obj, nil)
+                if err ~= nil then
+                    return false, err
+                end
+
+                return true, nil
+            end
+        end
+    end
+
+    return false, nil
+end
+
 local function handle_query(obj ,data)
     local node, err
     if transaction.is_in_transaction(obj) then
@@ -337,7 +384,15 @@ local function handle_query(obj ,data)
     elseif query_cmd == "rollback" then
         return transaction.handle_rollback(obj, data)
     elseif query_cmd == "set" then
+        local ok
+        ok, err = handle_set(obj, tokens)
+        if err ~= nil then
+            return err
+        end
 
+        if ok then
+            return
+        end
     end
 
     err = node:send_query(data)
@@ -387,13 +442,13 @@ function _M.dispatch(self, body, ctx)
     ctx.cmd = cmd
     ngx.log(ngx.ERR, "cmd no:" .. cmd)
     if cmd == const.cmd.COM_INIT_DB then
-        err, err_msg = handle_use_db(self, data)
+        err = handle_use_db(self, data)
     elseif cmd == const.cmd.COM_PING then
         err, err_msg = hand_ping(self)
     elseif cmd == const.cmd.COM_QUERY then
-        err, err_msg = handle_query(self, data, ctx)
+        err = handle_query(self, data, ctx)
     elseif cmd == const.cmd.COM_FIELD_LIST then
-        err, err_msg = handle_field_list(self, data)
+        err = handle_field_list(self, data)
     elseif cmd == const.cmd.COM_STMT_PREPARE then
         ctx.data = data
         err = stmt.handle_prepare(self, data)
@@ -408,6 +463,7 @@ function _M.dispatch(self, body, ctx)
     elseif cmd == const.cmd.COM_SET_OPTION then
         return handle_set_option(self, data)
     elseif cmd == const.cmd.COM_QUIT then
+        transaction.handle_rollback(self, data)
         self._closed = true
         return nil
     else

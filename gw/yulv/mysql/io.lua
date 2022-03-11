@@ -240,7 +240,7 @@ function _M.send_error_packet(obj, err_str, err)
     end
 
     local header = strchar(const.ERR_HEADER)
-    local code = utils.set_byte2(errno[err_str])
+    local err_no = utils.set_byte2(errno[err_str])
     if obj._capabilities and const.client_capabilities.CLIENT_PROTOCOL_41 > 0 then
         state = errstate[errno]
         if state == nil then
@@ -251,9 +251,9 @@ function _M.send_error_packet(obj, err_str, err)
 
     local packet
     if state == nil then
-        packet = header .. code .. msg
+        packet = header .. err_no .. msg
     else
-        packet = header .. code .. state .. msg
+        packet = header .. err_no .. state .. msg
     end
 
     return _M.send_packet(obj, packet, #packet)
@@ -452,9 +452,9 @@ function _M.handle_ok_packet(obj, data)
 end
 
 function _M.handle_err_packet(obj, data)
-    local code, state, message
+    local err_no, state, message
     local pos = 2
-    code, pos = utils.get_byte2(data, pos)
+    err_no, pos = utils.get_byte2(data, pos)
     if band(obj._capabilities, const.client_capabilities.CLIENT_PROTOCOL_41) > 0 then
         -- skip '#'
         pos = pos + 1
@@ -465,8 +465,7 @@ function _M.handle_err_packet(obj, data)
     message = strsub(data, pos)
 
     return {
-        code = code,
-        state = state,
+        errno = err_no,
         state = state,
         message = message
     }
