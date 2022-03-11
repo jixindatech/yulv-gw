@@ -315,7 +315,6 @@ local function handle_query(obj ,data)
     if transaction.is_in_transaction(obj) then
         node = obj._node
         if node == nil then
-            ngx.log(ngx.ERR, "?????")
             return "invalid transaction node"
         end
     else
@@ -327,7 +326,6 @@ local function handle_query(obj ,data)
     end
 
     local tokens = get_sql_tokens(data)
-    ngx.log(ngx.ERR, cjson.encode(tokens))
     local query_cmd = strlower(tokens[1])
 
     if query_cmd == "begin" then

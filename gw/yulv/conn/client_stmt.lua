@@ -244,11 +244,17 @@ function _M.handle_execute(obj, data)
         return err
     end
 
-    err = io.send_ok_packet(obj, result)
-    if err ~= nil then
-        return err
+    if result.field_count ~= nil then
+        err = io.write_rusult_set(obj, result)
+        if err ~= nil then
+            return err
+        end
+    else
+        err = io.send_ok_packet(obj, result)
+        if err ~= nil then
+            return err
+        end
     end
-
 end
 
 function _M.handle_close(obj, data)

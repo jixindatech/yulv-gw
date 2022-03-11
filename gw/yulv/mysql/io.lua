@@ -260,7 +260,7 @@ function _M.send_error_packet(obj, err_str, err)
 end
 
 function _M.send_error(obj, error)
-    local data = strchar(const.ERR_HEADER) .. utils.set_byte2(error.code)
+    local data = strchar(const.ERR_HEADER) .. utils.set_byte2(error.errno)
     if band(obj._capabilities, const.client_capabilities.CLIENT_PROTOCOL_41) > 0 then
         data = data .. '#' .. error.state
     end
@@ -761,11 +761,11 @@ end
 function _M.parse_error_packet(packet)
    local err_no, pos = utils.get_byte2(packet, 2)
    local marker = strsub(packet, pos, pos)
-   local sqlstate
+   local state
    if marker == '#' then
             -- with sqlstate
         pos = pos + 1
-        sqlstate = strsub(packet, pos, pos + 5 - 1)
+       state = strsub(packet, pos, pos + 5 - 1)
         pos = pos + 5
    end
 
@@ -773,7 +773,7 @@ function _M.parse_error_packet(packet)
    return {
        errno = err_no,
        message = message,
-       sqlstate = sqlstate,
+       state = state,
    }
 end
 
