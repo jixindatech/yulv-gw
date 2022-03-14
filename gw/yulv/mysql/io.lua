@@ -750,7 +750,7 @@ function _M.write_stmt(obj, tx, args)
 
     local err = _M.write_command(obj, const.cmd.COM_STMT_EXECUTE, data)
     if err ~= nil then
-        return er
+        return err
     end
 end
 
