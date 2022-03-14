@@ -297,7 +297,7 @@ local function handle_use_db(obj, data)
         return err
     end
 
-    pool.close_db(obj._node, obj._db)
+    pool.close_db(obj._node)
 
     return io.send_ok_packet(obj, nil)
 end
@@ -305,10 +305,10 @@ end
 local function hand_ping(obj)
     local err = io.send_ok_packet(obj, nil)
     if err ~= nil then
-        return nil, err
+        return err
     end
 
-    return true
+    return nil
 end
 
 local function handle_set(obj, tokens)
@@ -357,7 +357,7 @@ local function handle_set(obj, tokens)
     return false, nil
 end
 
-local function handle_query(obj ,data)
+local function handle_query(obj, data)
     local node, err
     if transaction.is_in_transaction(obj) then
         node = obj._node
@@ -407,7 +407,7 @@ local function handle_query(obj ,data)
     end
 
     if transaction.is_in_transaction(obj) ~= true then
-        pool.close_db(obj._node, obj._db)
+        pool.close_db(obj._node)
         obj._node = nil
     end
 
@@ -444,7 +444,7 @@ function _M.dispatch(self, body, ctx)
     if cmd == const.cmd.COM_INIT_DB then
         err = handle_use_db(self, data)
     elseif cmd == const.cmd.COM_PING then
-        err, err_msg = hand_ping(self)
+        err = hand_ping(self)
     elseif cmd == const.cmd.COM_QUERY then
         err = handle_query(self, data, ctx)
     elseif cmd == const.cmd.COM_FIELD_LIST then
@@ -452,10 +452,18 @@ function _M.dispatch(self, body, ctx)
     elseif cmd == const.cmd.COM_STMT_PREPARE then
         ctx.data = data
         err = stmt.handle_prepare(self, data)
+        if transaction.is_in_transaction(self) ~= true then
+            pool.close_db(self._node)
+            self._node = nil
+        end
     elseif cmd == const.cmd.COM_STMT_EXECUTE then
         return stmt.handle_execute(self, data)
     elseif cmd == const.cmd.COM_STMT_CLOSE then
-        return stmt.handle_close(self, data)
+        err=  stmt.handle_close(self, data)
+        if transaction.is_in_transaction(self) ~= true then
+            pool.close_db(self._node)
+            self._node = nil
+        end
     elseif cmd == const.cmd.COM_STMT_SEND_LONG_DATA then
         return stmt.handle_long_data(self, data)
     elseif cmd == const.cmd.COM_STMT_RESET then
@@ -509,7 +517,7 @@ function _M.new(opts)
 
         _stmt_id = 1,
         _stmts = {},
-
+        _srv_capabilities = {},
         _node = nil,
         _db = nil,
         _affected_rows = 0,

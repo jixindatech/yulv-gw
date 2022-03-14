@@ -150,7 +150,7 @@ function _M.send_packet(obj, req, size)
     if left > 0 then
         obj._packet_no = obj._packet_no + 1
         local packet = utils.set_byte3(left) .. strchar(band(obj._packet_no, 255)) .. strsub(req, (i-1)*MAX_PAYLOAD_LEN + 1, left)
-        local _, err =sock:send(packet)
+        local _, err = sock:send(packet)
         if err ~= nil then
             return err
         end
@@ -737,8 +737,6 @@ function _M.write_stmt(obj, tx, args)
         end
     end
 
-    ngx.log(ngx.ERR, cjson.encode(tx))
-
     local data = utils.set_byte4(tx.id) .. strchar(0x00) .. utils.set_byte4(1)
     if tx.params > 0 then
         if #nulls == 0 then
@@ -750,7 +748,6 @@ function _M.write_stmt(obj, tx, args)
         end
     end
 
-    ngx.log(ngx.ERR, "cmd exec command")
     local err = _M.write_command(obj, const.cmd.COM_STMT_EXECUTE, data)
     if err ~= nil then
         return er

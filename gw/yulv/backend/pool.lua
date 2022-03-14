@@ -1,52 +1,47 @@
 local error = error
 local tab_remove = table.remove
 
---local lrucache = require("resty.lrucache")
-local sql_server = require("gw.yulv.backend.server")
-
-local pool = {}
+local const = require("gw.yulv.mysql.const")
+local charset = require("gw.yulv.mysql.charset")
+local server = require("gw.yulv.backend.server")
+--local pool = {}
 local _M = {}
+local server_context = {}  --server context
 
-function _M.get_db(name, opts)
-    local res, err
-    local data = pool[name]
-    if data ~= nil then
-        while #data > 0 do
-            res = data[1]
-            tab_remove(data, 1)
-            err = res:ping()
-            if err == nil then
-                break
-            else
-                res:close()
-            end
-        end
+function _M.get_db(db, opts)
+    local pool_name =  opts.user .. ":" .. opts.database .. ":" .. opts.host .. ":" .. opts.port
 
-        if err == nil and res ~= nil then
-            if #data == 0 then
-                pool[name] = nil
-            else
-                pool[name] = data
-            end
-            return res
-        end
+    local srv, err
+    srv, err = server.new(opts, pool_name)
+    if err ~= nil then
+        return nil, err
     end
 
-    ngx.log(ngx.ERR, "new server:" .. opts.host)
-    return  sql_server.new(opts)
+    if srv._capabilities == nil then
+        local context = server_context[db]
+        srv._capabilities = context['capabilitie'] or const.DEFAULT_CAPABILITY
+    else
+        server_context[db] = {}
+        server_context[db]['capabilitie'] = srv._capabilities
+    end
+
+    err = srv:use_db(db)
+    if err ~= nil then
+        return nil, err
+    end
+
+    local cset = opts.charset or charset.DEFAULT_CHARSET
+    local collation = opts.collation or charset.DEFAULT_COLLATION_NAME
+    err = srv:set_charset(cset, collation)
+    if err ~= nil then
+        return nil, err
+    end
+
+    return srv, err
 end
 
-function _M.close_db(db, name)
-    local data = pool[name]
-    if data ~= nil then
-        local index = #data + 1
-        data[index] = db
-        pool[name] = data
-    else
-        data = {}
-        data[1] = db
-        pool[name] = data
-    end
+function _M.close_db(db)
+    db:set_keepalive()
 end
 
 return _M

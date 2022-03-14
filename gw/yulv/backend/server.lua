@@ -259,7 +259,7 @@ end
 local function _send_packet(self, req, size)
     local sock = self._sock
 
-    self._packet_no = self._packet_no + 1
+    self._packet_no = self._packet_no or -1
 
     -- print("packet no: ", self._packet_no)
 
@@ -1066,7 +1066,7 @@ function _M.new(self)
 end
 ]]--
 
-function _M.new(opts)
+function _M.new(opts, pool_name)
     local obj = {}
 
     local sock, err = tcp()
@@ -1107,11 +1107,9 @@ function _M.new(opts)
             pool = obj._user .. ":" .. obj._db .. ":" .. host .. ":" .. port
         end
 
-        --[[
-        ok, err = sock:connect(host, port, { pool = pool,
+        ok, err = sock:connect(host, port, { pool = pool_name,
                                              pool_size = opts.pool_size,
                                              backlog = opts.backlog })
-        ]]--
         ok, err = sock:connect(host, port)
     else
         local path = opts.path
@@ -1133,14 +1131,12 @@ function _M.new(opts)
         return nil, err
     end
 
-    --[[
-    local reused = sock:getreusedtimes()
 
+    local reused = sock:getreusedtimes()
     if reused and reused > 0 then
         obj.state = STATE_CONNECTED
-        return obj
+        return setmetatable(obj, mt)
     end
-    --]]
 
     obj._capabilities = bor(default_capability, CLIENT_PLUGIN_AUTH)
 
@@ -1704,28 +1700,25 @@ end
 
 
 function _M.set_charset(self, cset, collation)
-    if charset.charset_id[cset] == nil then
+    if cset == nil or charset.charset_id[cset] == nil then
         return "invalid charset"
     end
 
-    if collation == nil or collation == 0 then
-        collation = charset.collation_names[charset.charset_id[cset]]
+    if collation == nil then
+        collation = charset.charsets[cset]
     end
 
-    if self._charset == cset and self.collation == collation then
-        return nil
-    end
-
-    if charset.collation_names[collation] == nil then
+    if collation == nil then
         return "invalid collation"
     end
 
-    local err = io.write_command(self, const.cmd.COM_QUERY, strfmt("SET NAMES %s COLLATE %s", cset, charset.collation_names[collation]))
+    local err = io.write_command(self, const.cmd.COM_QUERY, "SET NAMES " .. cset .. " COLLATE " .. collation)
     if err ~= nil then
         return err
     end
 
-    _, err = io.read_ok(self)
+    local status
+    status, err = io.read_ok(self)
     if err ~= nil then
         return err
     end
@@ -1757,7 +1750,6 @@ function _M.ping(self)
 
     local _, err = io.send_packet(self, cmd, #cmd)
     if err ~= nil then
-        ngx.log(ngx.ERR, "send packet:" .. err)
         return err
     end
 

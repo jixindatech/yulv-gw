@@ -97,6 +97,7 @@ function _M.handle_prepare(obj, query)
     if err ~= nil then
         return err
     end
+
 end
 
 local function bind_stmt_args(stmt, nulls, types, values)
