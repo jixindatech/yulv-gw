@@ -162,7 +162,11 @@ local function process_client_handshake(self)
     pos = pos + authlen
 
     if band(capabilities, const.client_capabilities.CLIENT_CONNECT_WITH_DB) > 0 then
-        self._db, pos = utils.from_cstring(data, pos)
+        local db
+        db, pos = utils.from_cstring(data, pos)
+        if #db > 0 then
+            self._db = db
+        end
     end
 
     return nil
@@ -440,7 +444,7 @@ function _M.dispatch(self, body, ctx)
 
     local err, err_msg
     ctx.cmd = cmd
-    ngx.log(ngx.ERR, "cmd no:" .. cmd)
+    ngx.log(ngx.ERR, "user:[" .. self._user .. "] db:[" .. self._db.. "] cmd no:" .. cmd)
     if cmd == const.cmd.COM_INIT_DB then
         err = handle_use_db(self, data)
     elseif cmd == const.cmd.COM_PING then
