@@ -256,23 +256,6 @@ local function _compute_token(password, scramble)
 end
 
 
-local function _send_packet(self, req, size)
-    local sock = self._sock
-
-    self._packet_no = self._packet_no or -1
-
-    -- print("packet no: ", self._packet_no)
-
-    local packet = utils.set_byte3(size) .. strchar(band(self._packet_no, 255)) .. req
-
-    -- print("sending packet: ", _dump(packet))
-
-    -- print("sending packet... of size " .. #packet)
-
-    return sock:send(packet)
-end
-
-
 local function _recv_packet(self)
     local sock = self._sock
 
@@ -738,14 +721,13 @@ local function _write_hand_shake_response(self, auth_resp, plugin)
                 .. strrep("\0", 23)
 
         local packet_len = 4 + 4 + 1 + 23
-        local bytes, err = _send_packet(self, req, packet_len)
-        if not bytes then
+        local err = io.send_packet(self, req, packet_len)
+        if err then
             return "failed to send client authentication packet: " .. err
         end
 
         local sock = self._sock
-
-        local ok, err = sock:sslhandshake(false, nil, self.ssl_verify)
+        ok, err = sock:sslhandshake(false, nil, self.ssl_verify)
         if not ok then
             return "failed to do ssl handshake: " .. (err or "")
         end
@@ -763,8 +745,8 @@ local function _write_hand_shake_response(self, auth_resp, plugin)
     local packet_len = 4 + 4 + 1 + 23 + #self._user + 1
             + len + #self._db + 1 + #plugin + 1
 
-    local bytes, err = _send_packet(self, req, packet_len)
-    if not bytes then
+    local err = io.send_packet(self, req, packet_len)
+    if err ~= nil then
         return "failed to send client authentication packet: " .. err
     end
 
@@ -865,8 +847,8 @@ end
 local function _write_encode_password(self, auth_data, public_key)
     local enc, err = _encrypt_password(self, auth_data, public_key)
 
-    local bytes, err = _send_packet(self, enc, #enc)
-    if not bytes then
+    err = io.send_packet(self, enc, #enc)
+    if err then
         return "failed to send encode password packet: " .. err
     end
 end
@@ -940,8 +922,8 @@ local function _handle_auth_result(self, old_auth_data, plugin)
             return err
         end
 
-        local bytes, err = _send_packet(self, auth_resp, #auth_resp)
-        if not bytes then
+        err = io.send_packet(self, auth_resp, #auth_resp)
+        if err then
             return "failed to send client authentication packet: " .. err
         end
 
@@ -978,11 +960,11 @@ local function _handle_auth_result(self, old_auth_data, plugin)
             -- caching_sha2_password perform full authentication
             if status == 4 then
                 if self.is_unix or self.use_ssl then
-                    local bytes, err = _send_packet(self,
+                     err = io.send_packet(self,
                             utils.to_cstring(self.password),
                             #self.password + 1)
 
-                    if not bytes then
+                    if err then
                         return "failed to send cleartext auth packet: "
                                 .. err
                     end
@@ -991,8 +973,8 @@ local function _handle_auth_result(self, old_auth_data, plugin)
                     local public_key = self.public_key
                     if not public_key then
                         -- caching_sha2_password request public_key
-                        local bytes, err = _send_packet(self, "\2", 1)
-                        if not bytes then
+                        err = io.send_packet(self, "\2", 1)
+                        if err then
                             return "failed to send password request packet: "
                                     .. err
                         end
@@ -1036,16 +1018,6 @@ local function _handle_auth_result(self, old_auth_data, plugin)
         end
     end
 end
-
---[[
-function _M._new(self)
-    local sock, err = tcp()
-    if not sock then
-        return nil, err
-    end
-    return setmetatable({ sock = sock }, mt)
-end
-]]--
 
 function _M.set_timeout(self, timeout)
     local sock = self.sock
@@ -1110,7 +1082,9 @@ function _M.new(opts, pool_name)
         ok, err = sock:connect(host, port, { pool = pool_name,
                                              pool_size = opts.pool_size,
                                              backlog = opts.backlog })
+        --[[
         ok, err = sock:connect(host, port)
+        ]]--
     else
         local path = opts.path
         if not path then
@@ -1134,12 +1108,12 @@ function _M.new(opts, pool_name)
 
     local reused = sock:getreusedtimes()
     if reused and reused > 0 then
-        obj.state = STATE_CONNECTED
+        obj._state = STATE_CONNECTED
         return setmetatable(obj, mt)
     end
 
     obj._capabilities = bor(default_capability, CLIENT_PLUGIN_AUTH)
-
+    obj._packet_no = -1
     local auth_data, plugin, err, errno, sqlstate
     = _read_hand_shake_packet(obj)
 
@@ -1162,8 +1136,7 @@ function _M.new(opts, pool_name)
         return nil, err, errno, sqlstate
     end
 
-    obj.state = STATE_CONNECTED
-    obj.packet_noo = 3
+    obj._state = STATE_CONNECTED
 
     return setmetatable(obj, mt)
 end
@@ -1175,12 +1148,12 @@ function _M.set_keepalive(self, ...)
         return nil, "not initialized"
     end
 
-    if self.state ~= STATE_CONNECTED then
+    if self._state ~= STATE_CONNECTED then
         return nil, "cannot be reused in the current connection state: "
                 .. (self.state or "nil")
     end
 
-    self.state = nil
+    self._state = nil
     return sock:setkeepalive(...)
 end
 
@@ -1201,10 +1174,10 @@ function _M.close(self)
         return nil, "not initialized"
     end
 
-    self.state = nil
+    self._state = nil
 
-    local bytes, err = _send_packet(self, strchar(COM_QUIT), 1)
-    if not bytes then
+    local err = io.send_packet(self, strchar(COM_QUIT), 1)
+    if err then
         return nil, err
     end
 
@@ -1236,9 +1209,9 @@ function _M.send_query(self, query)
 end
 
 local function read_result(self, est_nrows)
-    if self.state ~= STATE_COMMAND_SENT then
+    if self._state ~= STATE_COMMAND_SENT then
         return nil, "cannot read result in the current context: "
-                .. (self.state or "nil")
+                .. (self._state or "nil")
     end
 
     local sock = self._sock
@@ -1252,7 +1225,7 @@ local function read_result(self, est_nrows)
     end
 
     if typ == RESP_ERR then
-        self.state = STATE_CONNECTED
+        self._state = STATE_CONNECTED
 
         local errno, msg, sqlstate = _parse_err_packet(packet)
         return nil, msg, errno, sqlstate
@@ -1264,12 +1237,12 @@ local function read_result(self, est_nrows)
             return res, "again"
         end
 
-        self.state = STATE_CONNECTED
+        self._state = STATE_CONNECTED
         return res
     end
 
     if typ == RESP_LOCALINFILE then
-        self.state = STATE_CONNECTED
+        self._state = STATE_CONNECTED
 
         return nil, "packet type " .. typ .. " not supported"
     end
@@ -1333,7 +1306,7 @@ local function read_result(self, est_nrows)
         rows[i] = row
     end
 
-    self.state = STATE_CONNECTED
+    self._state = STATE_CONNECTED
 
     return rows
 end
@@ -1748,12 +1721,12 @@ function _M.ping(self)
     local cmd = strchar(0x0e)
     self._packet_no = -1
 
-    local _, err = io.send_packet(self, cmd, #cmd)
+    local err = io.send_packet(self, cmd, #cmd)
     if err ~= nil then
         return err
     end
 
-    _, err = io.read_ok(self)
+    local ok, err = io.read_ok(self)
     if err ~= nil then
         return err
     end
