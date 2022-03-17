@@ -10,6 +10,9 @@ local server_context = {}  --server context
 
 function _M.get_db(db, opts)
     local pool_name =  opts.user .. ":" .. opts.database .. ":" .. opts.host .. ":" .. opts.port
+    if opts.charset == nil then
+        opts.charset = charset.DEFAULT_CHARSET
+    end
 
     local srv, err
     srv, err = server.new(opts, pool_name)
@@ -24,12 +27,12 @@ function _M.get_db(db, opts)
         server_context[db] = {}
         server_context[db]['capabilitie'] = srv._capabilities
     end
-
+    --[[
     err = srv:use_db(db)
     if err ~= nil then
         return nil, err
     end
-
+    ]]--
     local cset = opts.charset or charset.DEFAULT_CHARSET
     local collation = opts.collation or charset.DEFAULT_COLLATION_NAME
     err = srv:set_charset(cset, collation)

@@ -104,7 +104,6 @@ local function bind_stmt_args(stmt, nulls, types, values)
     local pos = 1
     local args = stmt.args
     local value
-
     for i=1, stmt.params do
         if band(strbyte(nulls, rshift(i-1, 3)+1), lshift(1, fmod(i-1, 8))) > 0 then
             args[i] = nil
@@ -169,16 +168,18 @@ local function bind_stmt_args(stmt, nulls, types, values)
                 tp == const.stmt.MYSQL_TYPE_TIMESTAMP or
                 tp == const.stmt.MYSQL_TYPE_DATETIME or
                 tp == const.stmt.MYSQL_TYPE_TIME then
-            if #values > pos then
+            if #values >= pos then
                 local len, null
                 len, pos, null = utils.from_length_coded_bin(values, pos)
-                if null  then
+                if null then
                     value = nil
                 else
                     value = strsub(values, pos, pos + len - 1)
                     pos = pos + len
                 end
                 args[i]  = { type = tp, value = value }
+            else
+                return "invalid data length"
             end
         else
             return "invalid filed type"

@@ -15,7 +15,6 @@ local bxor = bit.bxor
 local bor = bit.bor
 local lshift = bit.lshift
 local rshift = bit.rshift
-local tohex = bit.tohex
 local sha1 = ngx.sha1_bin
 local tabconcat = table.concat
 local setmetatable = setmetatable
@@ -24,7 +23,7 @@ local tonumber = tonumber
 local to_int = math.floor
 
 local has_rsa, resty_rsa = pcall(require, "resty.rsa")
-
+local cjson = require("cjson.safe")
 local utils = require("gw.utils.util")
 local const = require("gw.yulv.mysql.const")
 local io = require("gw.yulv.mysql.io")
@@ -112,21 +111,10 @@ local function _dump(data)
     local len = #data
     local bytes = new_tab(len, 0)
     for i = 1, len do
-        bytes[i] = format("%x", strbyte(data, i))
+        bytes[i] = strfmt("%x", strbyte(data, i))
     end
     return tabconcat(bytes, " ")
 end
-
-
-local function _dumphex(data)
-    local len = #data
-    local bytes = new_tab(len, 0)
-    for i = 1, len do
-        bytes[i] = tohex(strbyte(data, i), 2)
-    end
-    return tabconcat(bytes, " ")
-end
-
 
 local function _pwd_hash(password)
     local add = 7
@@ -1105,7 +1093,6 @@ function _M.new(opts, pool_name)
         return nil, err
     end
 
-
     local reused = sock:getreusedtimes()
     if reused and reused > 0 then
         obj._state = STATE_CONNECTED
@@ -1137,7 +1124,6 @@ function _M.new(opts, pool_name)
     end
 
     obj._state = STATE_CONNECTED
-
     return setmetatable(obj, mt)
 end
 

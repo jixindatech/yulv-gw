@@ -7,6 +7,7 @@ local lshift = bit.lshift
 local rshift = bit.rshift
 local band = bit.band
 local bxor = bit.bxor
+local tohex = bit.tohex
 
 local string = string
 local strbyte = string.byte
@@ -215,6 +216,15 @@ function _M.from_length_coded_bin(data, pos)
     end
 
     return nil, pos + 1
+end
+
+function _M.dumphex(data)
+    local len = #data
+    local bytes = new_tab(len, 0)
+    for i = 1, len do
+        bytes[i] = tohex(strbyte(data, i), 2)
+    end
+    return tabconcat(bytes, " ")
 end
 
 
