@@ -10,7 +10,7 @@ local server_context = {}  --server context
 
 function _M.get_db(db, opts)
     local pool_name =  opts.user .. ":" .. opts.database .. ":" .. opts.host .. ":" .. opts.port
-    if opts.charset == nil then
+    if opts.charset == nil or #opts.charset == 0 then
         opts.charset = charset.DEFAULT_CHARSET
     end
 
