@@ -638,15 +638,19 @@ function _M.write_stmt(obj, tx, args)
     local flag = 0
 
     if tx.params > 0 then
-        types = new_tab(0, lshift(tx.params, 1))
-        values = new_tab(0, tx.params)
-        nulls = new_tab(0, rshift((tx.params + 7), 3))
+        types = new_tab(lshift(tx.params, 1), 0)
+        values = new_tab(tx.params, 0)
+        local len = rshift((tx.params + 7), 3)
+        nulls = new_tab(len, 0)
+        for i=1, len do
+            nulls[i] = strchar(0)
+        end
 
         for i, item in ipairs(args) do
             if item == nil then
                 local bits = nulls[modf(i-1, 8) + 1] or 0
-                nulls[modf(i-1, 8) + 1] = strbyte(bor(bits, lshift(1, fmod(i - 1, 8))))
-                types[i] = strbyte(const.stmt.MYSQL_TYPE_NULL)
+                nulls[modf(i-1, 8) + 1] = strchar(strbyte(bor(bits, lshift(1, fmod(i - 1, 8)))))
+                types[i] = strchar(strbyte(const.stmt.MYSQL_TYPE_NULL))
             end
 
             flag = 1
@@ -739,9 +743,6 @@ function _M.write_stmt(obj, tx, args)
 
     local data = utils.set_byte4(tx.id) .. strchar(0x00) .. utils.set_byte4(1)
     if tx.params > 0 then
-        if #nulls == 0 then
-            nulls[1] = strchar(0x00)
-        end
         data = data .. tabconcat(nulls) .. strchar(flag)
         if flag == 1 then
             data = data .. tabconcat(types) .. tabconcat(values)
