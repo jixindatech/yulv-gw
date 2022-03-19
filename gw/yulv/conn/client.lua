@@ -7,6 +7,7 @@ local strbyte = string.byte
 local strlen = string.len
 local strfmt = string.format
 local strlower = string.lower
+local strupper = string.upper
 
 local bit = bit
 local lshift = bit.lshift
@@ -317,11 +318,14 @@ end
 
 local function handle_set(obj, tokens)
     if tokens[2] ~= nil then
-        --set autocommit = 0
-        local commit = strlower(tokens[2])
-        if commit == "autocommit" or
-                commit == "@@autocommit" or
-                commit == "@@session.autocommit" then
+        local action = strupper(tokens[2])
+        if action == "`AUTOCOMMIT`" or
+                action == "AUTOCOMMIT" or
+                action == "`@@AUTOCOMMIT`" or
+                action == "@@AUTOCOMMIT" or
+                action == "`@@SESSION.AUTOCOMMIT`" or
+                action == "@@SESSION.AUTOCOMMIT" then
+            --set autocommit = 0
             if tokens[4] == nil then
                 return false, "invalid autocommit parameter"
             end
@@ -355,6 +359,43 @@ local function handle_set(obj, tokens)
 
                 return true, nil
             end
+        elseif action == "`NAMES`" or
+                action == "NAMES" or
+                action == "`CHARACTER_SET_RESULTS`" or
+                action == "CHARACTER_SET_RESULTS" or
+                action == "`@@CHARACTER_SET_RESULTS`" or
+                action == "@@CHARACTER_SET_RESULTS" or
+                action == "`@@SESSION.CHARACTER_SET_RESULTS`" or
+                action == "@@SESSION.CHARACTER_SET_RESULTS" or
+                action == "`CHARACTER_SET_CLIENT`" or
+                action == "CHARACTER_SET_CLIENT" or
+                action == "`@@CHARACTER_SET_CLIENT`" or
+                action == "@@CHARACTER_SET_CLIENT" or
+                action == "`@@SESSION.CHARACTER_SET_CLIENT`" or
+                action == "@@SESSION.CHARACTER_SET_CLIENT" or
+                action == "`CHARACTER_SET_CONNECTION`" or
+                action == "CHARACTER_SET_CONNECTION" or
+                action == "`@@CHARACTER_SET_CONNECTION`" or
+                action == "@@CHARACTER_SET_CONNECTION" or
+                action == "`@@SESSION.CHARACTER_SET_CONNECTION`" or
+                action == "@@SESSION.CHARACTER_SET_CONNECTION"
+        then
+            if tokens[3] == nil then
+                return false, "invalid charset"
+            end
+            if obj._charset ~= strlower(tokens[3]) then
+                return false, "unsportted charset"
+            end
+            if tokens[4] ~= nil then
+                if strupper(tokens[4]) ~= "COLLATE" then
+                    return false, "invalid charset collate parameter"
+                end
+                if tokens[5] == nil or obj._collation ~= strlower(tokens[5]) then
+                    return false, "invalid collate parameter"
+                end
+            end
+
+            return true, nil
         end
     end
 
