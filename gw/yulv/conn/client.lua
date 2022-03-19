@@ -383,9 +383,11 @@ local function handle_set(obj, tokens)
             if tokens[3] == nil then
                 return false, "invalid charset"
             end
+
             if obj._charset ~= strlower(tokens[3]) then
                 return false, "unsportted charset"
             end
+
             if tokens[4] ~= nil then
                 if strupper(tokens[4]) ~= "COLLATE" then
                     return false, "invalid charset collate parameter"
@@ -393,6 +395,12 @@ local function handle_set(obj, tokens)
                 if tokens[5] == nil or obj._collation ~= strlower(tokens[5]) then
                     return false, "invalid collate parameter"
                 end
+            end
+
+            obj._status = band(obj._status, bnot(client_const.SERVER_STATUS_AUTOCOMMIT))
+            local err = io.send_ok_packet(obj, nil)
+            if err ~= nil then
+                return false, err
             end
 
             return true, nil
