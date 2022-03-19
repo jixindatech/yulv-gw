@@ -543,6 +543,16 @@ function _M.dispatch(self, body, ctx)
     return err, err_msg
 end
 
+function _M.rollback(self)
+    if self._closed then
+        return
+    end
+
+    transaction.handle_rollback(self, nil)
+    self._closed = true
+    return nil
+end
+
 function _M.new(opts)
     if #opts.users == nil then
         return nil, "invalid options"

@@ -132,6 +132,8 @@ function _M.content_phase()
         ::CONTINUE::
     end
 
+    client:rollback()
+
     local event = "quit"
     logger.log({
         transaction = transaction,
