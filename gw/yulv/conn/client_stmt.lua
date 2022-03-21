@@ -97,7 +97,6 @@ function _M.handle_prepare(obj, query)
     if err ~= nil then
         return err
     end
-
 end
 
 local function bind_stmt_args(stmt, nulls, types, values)
@@ -260,11 +259,6 @@ function _M.handle_execute(obj, data)
 end
 
 function _M.handle_close(obj, data)
-    local node = obj._node
-    if node == nil then
-        return "invalid stmt node2"
-    end
-
     local pos = 1
     local stmtid
     stmtid, pos = utils.get_byte4(data, pos)
@@ -279,11 +273,6 @@ function _M.handle_close(obj, data)
 end
 
 function _M.handle_long_data(obj, data)
-    local node = obj._node
-    if node == nil then
-        return "invalid stmt node3"
-    end
-
     local pos = 1
     local stmtid
     stmtid, pos = utils.get_byte4(data, pos)
@@ -304,11 +293,6 @@ function _M.handle_long_data(obj, data)
 end
 
 function _M.handle_reset(obj, data)
-    local node = obj._node
-    if node == nil then
-        return "invalid stmt node4"
-    end
-
     local pos = 1
     local stmtid
     stmtid, pos = utils.get_byte4(data, pos)

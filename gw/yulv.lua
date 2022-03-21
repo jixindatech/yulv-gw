@@ -132,7 +132,7 @@ function _M.content_phase()
         ::CONTINUE::
     end
 
-    client:rollback()
+    client:rollback(err)
 
     local event = "quit"
     logger.log({

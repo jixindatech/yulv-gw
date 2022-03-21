@@ -235,7 +235,7 @@ local function write_field_list(obj, fields)
         err = io.send_batch_packet(obj, temp, total, nil)
     end
 
-    local eof = io.get_eof_packet(obj, 0)
+    local eof = io.get_eof_packet(obj)
     err = io.send_batch_packet(obj, eof, total, true)
     if err ~= nil then
         return err
@@ -270,8 +270,6 @@ local function handle_field_list(obj, data)
         return err
     end
 
-    pool.close_db(obj._node, obj._db)
-
     return write_field_list(obj, fields)
 end
 
@@ -301,8 +299,6 @@ local function handle_use_db(obj, data)
     if err ~= nil then
         return err
     end
-
-    pool.close_db(obj._node)
 
     return io.send_ok_packet(obj, nil)
 end
@@ -397,7 +393,6 @@ local function handle_set(obj, tokens)
                 end
             end
 
-            obj._status = band(obj._status, bnot(client_const.SERVER_STATUS_AUTOCOMMIT))
             local err = io.send_ok_packet(obj, nil)
             if err ~= nil then
                 return false, err
@@ -459,11 +454,6 @@ local function handle_query(obj, data)
         return err
     end
 
-    if transaction.is_in_transaction(obj) ~= true then
-        pool.close_db(obj._node)
-        obj._node = nil
-    end
-
     if result.rows ~=nil and result.colums ~= nil then
         return io.write_rusult_set(obj, result)
     else
@@ -472,13 +462,6 @@ local function handle_query(obj, data)
 end
 
 local function handle_set_option(obj, data)
-    local node, err
-    node, err = pool.get_db(obj._db, obj._nodes[obj._db])
-    if err ~= nil then
-        return err
-    end
-    obj._node = node
-
     local eof = io.get_eof_packet(obj)
     return io.send_packet(obj, eof, #eof)
 end
@@ -505,18 +488,10 @@ function _M.dispatch(self, body, ctx)
     elseif cmd == const.cmd.COM_STMT_PREPARE then
         ctx.data = data
         err = stmt.handle_prepare(self, data)
-        if transaction.is_in_transaction(self) ~= true then
-            pool.close_db(self._node)
-            self._node = nil
-        end
     elseif cmd == const.cmd.COM_STMT_EXECUTE then
         return stmt.handle_execute(self, data)
     elseif cmd == const.cmd.COM_STMT_CLOSE then
         err=  stmt.handle_close(self, data)
-        if transaction.is_in_transaction(self) ~= true then
-            pool.close_db(self._node)
-            self._node = nil
-        end
     elseif cmd == const.cmd.COM_STMT_SEND_LONG_DATA then
         return stmt.handle_long_data(self, data)
     elseif cmd == const.cmd.COM_STMT_RESET then
@@ -531,24 +506,23 @@ function _M.dispatch(self, body, ctx)
         err = "ER_UNKNOWN_ERROR"
         err_msg = {strfmt("command %d not unsupported ", cmd)}
     end
-    --[[
-    if self._stmt == nil or transaction.is_in_transaction(self) ~= true then
-        ngx.log(ngx.ERR,"close database handle")
-        pool.close_db(self._node, self._db)
+
+    if transaction.is_in_transaction(self) ~= true and self._node ~= nil then
+        pool.close_db(self._node)
         self._node = nil
-    else
-        ngx.log(ngx.ERR,"in transaction")
     end
-    ]]--
+
     return err, err_msg
 end
 
-function _M.rollback(self)
+function _M.rollback(self, err)
     if self._closed then
         return
     end
 
-    transaction.handle_rollback(self, nil)
+    ngx.log(ngx.ERR, "rollback now")
+
+    transaction.handle_rollback(self, err)
     self._closed = true
     return nil
 end

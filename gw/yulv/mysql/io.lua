@@ -436,11 +436,9 @@ function _M.handle_ok_packet(obj, data)
     local status
     if band(obj._capabilities, const.client_capabilities.CLIENT_PROTOCOL_41) > 0 then
         status, pos = utils.get_byte2(data, pos)
-        obj._status = status
         pos = pos + 2
     elseif band(obj._capabilities, const.client_capabilities.CLIENT_TRANSACTIONS) > 0 then
         status, pos = utils.get_byte2(data, pos)
-        obj._status = status
         pos = pos + 2
     end
 
@@ -485,7 +483,6 @@ function _M.read_result_columns(obj)
             --[[
             if band(obj._capabilities, const.client_capabilities.CLIENT_PROTOCOL_41) > 0 then
                 local status = utils.get_byte2(data, 4, 2)
-                obj._status = status
             else
             end
             ]]--
@@ -513,7 +510,6 @@ function _M.read_result_rows(obj, binary)
             --[[
             if band(obj._capabilities, const.client_capabilities.CLIENT_PROTOCOL_41) > 0 then
                 local status = utils.get_byte2(data, 4, 2)
-                obj._status = status
             end
             ]]--
             break
@@ -605,7 +601,7 @@ function _M.write_rusult_set(obj, result)
         index = index + 1
     end
 
-    local eof = _M.get_eof_packet(obj, 0)
+    local eof = _M.get_eof_packet(obj)
 
     obj._packet_no = obj._packet_no + 1
     packet = utils.set_byte3(#eof) .. strchar(obj._packet_no) .. eof

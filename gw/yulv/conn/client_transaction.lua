@@ -62,7 +62,7 @@ function _M.handle_commit(obj, data)
     obj._node = nil
 end
 
-function _M.handle_rollback(obj, data)
+function _M.handle_rollback(obj, error)
     if _M.is_in_transaction(obj) ~= true or obj._node == nil then
         return "invalid transaction"
     end
@@ -79,10 +79,11 @@ function _M.handle_rollback(obj, data)
     end
 
     obj._status = band(obj._status, bnot(client_const.SERVER_STATUS_IN_TRANS))
-
-    err = io.send_ok_packet(obj, res)
-    if err ~= nil then
-        return err
+    if error == nil then
+        err = io.send_ok_packet(obj, res)
+        if err ~= nil then
+            return err
+        end
     end
 
     obj._node = nil
