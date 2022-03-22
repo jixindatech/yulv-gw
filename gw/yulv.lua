@@ -67,6 +67,7 @@ end
 
 function _M.content_phase()
     local pass = false
+    local timestamp = ngx.now()
     local transaction = uuid.generate_v4()
     local ip = ngx.var.remote_addr
     --local port = ngx.var.remote_port
@@ -94,7 +95,7 @@ function _M.content_phase()
     end
 
     logger.log({
-        timestamp = ngx.time(),
+        timestamp = timestamp,
         transaction = transaction,
         ip = ip,
         user = client._user,
@@ -111,7 +112,8 @@ function _M.content_phase()
             break
         end
 
-        context. timestamp = ngx.time()
+        timestamp = ngx.now()
+        context.timestamp = timestamp
         err = client:dispatch(data, context)
         if err ~= nil then
             if type(err) == "string" then
@@ -126,6 +128,31 @@ function _M.content_phase()
             end
         end
 
+        if context.req_id ~= nil then
+            logger.log({
+                transaction = transaction,
+                timestamp = context.timestamp,
+                ip = ip,
+                user = client._user,
+                database = client._db or "",
+                sql = context.sql,
+                req_id = context.req_id,
+                event = "req_rule"}, "rule")
+        end
+
+        timestamp = ngx.now()
+        if context.resp_id ~= nil then
+            logger.log({
+                transaction = transaction,
+                timestamp = timestamp,
+                ip = ip,
+                user = client._user,
+                database = client._db or "",
+                sql = context.sql,
+                resp_id = context.resp_id,
+                event = "resp_rule"}, "rule")
+        end
+
         if client:is_closed() then
             break
         end
@@ -135,14 +162,14 @@ function _M.content_phase()
 
     client:rollback(err)
 
-    local event = "quit"
+    timestamp = ngx.now()
     logger.log({
         transaction = transaction,
-        timestamp = ngx.time(),
+        timestamp = timestamp,
         ip = ip,
         user = client._user,
         database = client._db or "",
-        event = event,
+        event = "quit",
     }, "access")
 
     return err

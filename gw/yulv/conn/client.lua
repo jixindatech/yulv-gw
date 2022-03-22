@@ -409,7 +409,15 @@ local function handle_set(obj, tokens)
 end
 
 local function handle_query(obj, ctx, data)
-    local node, err
+    local action, err = request.process(ctx)
+    if err ~= nil then
+        return err
+    end
+    if action == "deny" then
+        return "denied"
+    end
+
+    local node
     if transaction.is_in_transaction(obj) then
         node = obj._node
         if node == nil then
@@ -458,7 +466,14 @@ local function handle_query(obj, ctx, data)
     end
 
     if result.rows ~=nil and result.colums ~= nil then
-        err = response.process(ctx, result)
+        -- Response process
+        if action ~= "allow" then
+            action, err = response.process(ctx, result)
+            if action == "deny" then
+                return "deny"
+            end
+        end
+
         return io.write_rusult_set(obj, result)
     else
         return io.send_ok_packet(obj, result)
@@ -496,14 +511,6 @@ function _M.dispatch(self, body, ctx)
         err = hand_ping(self)
     elseif cmd == const.cmd.COM_QUERY then
         fill_context(self, ctx, data)
-        action, err = request.process(ctx)
-        if err ~= nil then
-            return err
-        end
-        if action == "deny" then
-            return "denied"
-        end
-
         err = handle_query(self, ctx, data)
     elseif cmd == const.cmd.COM_FIELD_LIST then
         err = handle_field_list(self, data)
