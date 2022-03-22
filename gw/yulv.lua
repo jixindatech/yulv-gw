@@ -128,6 +128,18 @@ function _M.content_phase()
             end
         end
 
+        logger.log({
+            timestamp = timestamp,
+            transaction = transaction,
+            ip = ip,
+            user = client._user,
+            database = client._db or "",
+            event = "access",
+            sql = context.sql or "",
+            cmd = context.cmd or 0,
+            fingerprint = context.fingerprint or "",
+        }, "access")
+
         if context.req_id ~= nil then
             logger.log({
                 transaction = transaction,
@@ -136,7 +148,9 @@ function _M.content_phase()
                 user = client._user,
                 database = client._db or "",
                 sql = context.sql,
+                cmd = context.cmd or 0,
                 req_id = context.req_id,
+                fingerprint = context.fingerprint or "",
                 event = "req_rule"}, "rule")
         end
 
@@ -149,7 +163,9 @@ function _M.content_phase()
                 user = client._user,
                 database = client._db or "",
                 sql = context.sql,
+                cmd = context.cmd or 0,
                 resp_id = context.resp_id,
+                fingerprint = context.fingerprint or "",
                 event = "resp_rule"}, "rule")
         end
 

@@ -61,7 +61,7 @@ local function write_prepare(obj, tx)
     return io.send_batch_packet(obj, eof, total, true)
 end
 
-function _M.handle_prepare(obj, query)
+function _M.handle_prepare(obj, ctx, query)
     local node, err
     node, err = pool.get_db(obj._db, obj._nodes[obj._db])
     if err ~= nil then
@@ -73,6 +73,8 @@ function _M.handle_prepare(obj, query)
     if err ~= nil then
         return err
     end
+
+    ctx.sql = query
 
     local tx
     tx, err = io.prepare(node, query)

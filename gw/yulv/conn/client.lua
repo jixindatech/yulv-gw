@@ -516,7 +516,7 @@ function _M.dispatch(self, body, ctx)
         err = handle_field_list(self, data)
     elseif cmd == const.cmd.COM_STMT_PREPARE then
         ctx.data = data
-        err = stmt.handle_prepare(self, data)
+        err = stmt.handle_prepare(self, ctx, data)
     elseif cmd == const.cmd.COM_STMT_EXECUTE then
         return stmt.handle_execute(self, data)
     elseif cmd == const.cmd.COM_STMT_CLOSE then
