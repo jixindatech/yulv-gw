@@ -1,8 +1,11 @@
 local ipairs = ipairs
+local cjson = require("cjson.safe")
 local schema = require("gw.schema")
 local config = require("gw.core.config")
 local const  = require("gw.yulv.mysql.const")
 local match = require("gw.yulv.hooks.match")
+local action = require("gw.yulv.hooks.action")
+
 local _M = {}
 local module_name = "resprule"
 local module
@@ -51,7 +54,7 @@ function _M.init_worker(conf)
 
 end
 
-function _M.response(context)
+function _M.process(context, result)
     local cmd = context.cmd
     local ip = context.ip
     local fp = context.fingerprint
@@ -70,11 +73,11 @@ function _M.response(context)
                 if rule.matcher.database ~= nil and rule.matcher.database ~= db then
                     goto CONTINUE
                 end
-
+                --[[
                 if rule.matcher.type ~= nil and rule.matcher.type ~= sqltype then
                     goto CONTINUE
                 end
-
+                ]]--
                 if rule.matcher.fingerprint ~= nil and rule.matcher.fingerprint ~= fp then
                     goto CONTINUE
                 end
@@ -90,14 +93,14 @@ function _M.response(context)
                     end
                 end
 
-                local rows = context.record_count
+                local rows = #result.rows
                 if rule.matcher.rows > 0 and rule.matcher.rows > rows then
                     goto CONTINUE
                 end
 
                 if true then
-                    context.rule_id = rule.id
-                    return  rule.action
+                    context.resp_id = item.id
+                    return  action[rule.action]
                 end
 
                 ::CONTINUE::

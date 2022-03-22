@@ -7,6 +7,7 @@ local schema = require("gw.schema")
 local config = require("gw.core.config")
 local const  = require("gw.yulv.mysql.const")
 local match = require("gw.yulv.hooks.match")
+local action = require("gw.yulv.hooks.action")
 
 local _M = {}
 local module_name = "reqrule"
@@ -75,13 +76,14 @@ function _M.init_worker(conf)
 
 end
 
-function _M.request(context)
+function _M.process(context)
     local ip = context.ip
+    local user = context.user
     local cmd = context.cmd
     local fp = context.fingerprint
     local db = context.db
     local sqltype = context.sqltype
-    local data = context.data
+    local sql = context.sql
     
     if cmd == const.cmd.COM_QUERY or cmd == const.cmd.COM_STMT_PREPARE then
         if module ~= nil and module.values ~= nil and #module.values > 0 then
@@ -91,22 +93,29 @@ function _M.request(context)
                     goto CONTINUE
                 end
 
+                if rule.matcher.user ~= nil and rule.matcher.user ~= user then
+                    goto CONTINUE
+                end
+
                 if rule.matcher.database ~= nil and rule.matcher.database ~= db then
                     goto CONTINUE
                 end
 
+                --[[
                 if rule.matcher.type ~= nil and rule.matcher.type ~= sqltype then
                     goto CONTINUE
                 end
+                ]]--
 
                 if rule.matcher.fingerprint ~= nil and rule.matcher.fingerprint ~= fp then
                     goto CONTINUE
                 end
 
                 if rule.matcher.string ~= nil then
-                    local res, err = match[rule.matcher.string.match](data, rule.matcher.string.pattern)
+                    local res, err = match[rule.matcher.string.match](sql, rule.matcher.string.pattern)
                     if err ~= nil then
                         ngx.log(ngx.ERR, "match " .. rule.matcher.string.match .. " error:" .. err)
+                        return nil, err
                     end
 
                     if res ~= nil then
@@ -115,8 +124,8 @@ function _M.request(context)
                 end
 
                 if true then
-                    context.rule_id = rule.id
-                    return  rule.matcher.action
+                    context.req_id = item.id
+                    return  action[rule.action]
                 end
 
                 ::CONTINUE::

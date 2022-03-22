@@ -80,6 +80,7 @@ function _M.content_phase()
     local client, err = cli.new({
         sock = ngx.req.socket(),
         users = config.get_users(),
+        client = ip,
     })
     if err ~= nil then
         io.send_error_packet(client,"ER_HANDSHAKE_ERROR", {err})

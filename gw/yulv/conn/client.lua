@@ -35,6 +35,9 @@ local pool  = require("gw.yulv.backend.pool")
 local field       = require("gw.yulv.mysql.field")
 local stmt = require("gw.yulv.conn.client_stmt")
 local transaction = require("gw.yulv.conn.client_transaction")
+local request = require("gw.yulv.hooks.request")
+local response = require("gw.yulv.hooks.response")
+local fp = require("gw.yulv.hooks.fingerprint")
 
 local _M = {}
 local mt = { __index = _M }
@@ -405,7 +408,7 @@ local function handle_set(obj, tokens)
     return false, nil
 end
 
-local function handle_query(obj, data)
+local function handle_query(obj, ctx, data)
     local node, err
     if transaction.is_in_transaction(obj) then
         node = obj._node
@@ -455,6 +458,7 @@ local function handle_query(obj, data)
     end
 
     if result.rows ~=nil and result.colums ~= nil then
+        err = response.process(ctx, result)
         return io.write_rusult_set(obj, result)
     else
         return io.send_ok_packet(obj, result)
@@ -470,11 +474,20 @@ function _M.is_closed(self)
     return self._closed == true
 end
 
+local function fill_context(obj, ctx, data)
+    ctx.fingerprint = fp.parse(data)
+    ctx.ip = obj._client
+    ctx.db = obj._db
+    ctx.sqltype = ""
+    ctx.sql = data
+end
+
 function _M.dispatch(self, body, ctx)
     local cmd = strbyte(body, 1)
     local data = strsub(body, 2)
 
     local err, err_msg
+    local action
     ctx.cmd = cmd
     ngx.log(ngx.ERR, "user:[" .. self._user .. "] db:[" .. self._db.. "] cmd no:" .. cmd)
     if cmd == const.cmd.COM_INIT_DB then
@@ -482,7 +495,16 @@ function _M.dispatch(self, body, ctx)
     elseif cmd == const.cmd.COM_PING then
         err = hand_ping(self)
     elseif cmd == const.cmd.COM_QUERY then
-        err = handle_query(self, data, ctx)
+        fill_context(self, ctx, data)
+        action, err = request.process(ctx)
+        if err ~= nil then
+            return err
+        end
+        if action == "deny" then
+            return "denied"
+        end
+
+        err = handle_query(self, ctx, data)
     elseif cmd == const.cmd.COM_FIELD_LIST then
         err = handle_field_list(self, data)
     elseif cmd == const.cmd.COM_STMT_PREPARE then
@@ -499,7 +521,7 @@ function _M.dispatch(self, body, ctx)
     elseif cmd == const.cmd.COM_SET_OPTION then
         return handle_set_option(self, data)
     elseif cmd == const.cmd.COM_QUIT then
-        transaction.handle_rollback(self, data)
+        transaction.handle_rollback(self, nil)
         self._closed = true
         return nil
     else
@@ -542,6 +564,7 @@ function _M.new(opts)
     return setmetatable({
         _sock = opts.sock,
         _users = opts.users,
+        _client = opts.client,
         _capabilities = nil,
         _max_packet_size = max_packet_size,
         _salt = salt,
